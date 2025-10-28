@@ -16,6 +16,16 @@ from snowflake.snowpark import functions as F
 import json
 
 # ================================================================
+# PAGE CONFIGURATION - MUST BE FIRST STREAMLIT COMMAND
+# ================================================================
+
+st.set_page_config(
+    page_title="PDF Processing & Image Analysis",
+    page_icon="📄",
+    layout="wide"
+)
+
+# ================================================================
 # CONFIGURATION
 # ================================================================
 
@@ -105,21 +115,33 @@ def upload_pdf_to_stage(uploaded_file, stage_name):
         Success boolean
     """
     try:
-        # Write file to stage using Snowpark
-        file_bytes = uploaded_file.getvalue()
+        import tempfile
+        import os
         
-        # Create a temporary file path
-        stage_path = f"@{DATABASE}.{SCHEMA}.{stage_name}/{uploaded_file.name}"
+        # Write to temporary file first
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
         
-        # Use PUT command to upload
-        put_result = session.file.put_stream(
-            uploaded_file,
-            stage_path,
-            auto_compress=False,
-            overwrite=True
-        )
-        
-        return True
+        try:
+            # Upload using PUT command via SQL
+            stage_path = f"@{DATABASE}.{SCHEMA}.{stage_name}"
+            
+            # Use PUT command through session.sql
+            # Note: PUT command returns to local result set, not stage
+            put_result = session.file.put(
+                tmp_path,
+                stage_path,
+                auto_compress=False,
+                overwrite=True
+            )
+            
+            return True
+        finally:
+            # Clean up temp file
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+                
     except Exception as e:
         st.error(f"Error uploading file: {str(e)}")
         return False
@@ -136,10 +158,20 @@ def extract_text_from_pdf_udf(file_name, stage_name):
         Extracted text string
     """
     try:
-        file_path = f"@{stage_name}/{file_name}"
+        from snowflake.snowpark.functions import call_function, lit
         
-        # Call the UDF - use fully qualified name
-        result = session.sql(f"SELECT {DATABASE}.{SCHEMA}.EXTRACT_PDF_TEXT(BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{stage_name}, '{file_name}')) AS TEXT").collect()
+        # Escape file name for safety
+        file_name_escaped = file_name.replace("'", "''")
+        
+        # Call the UDF - use fully qualified name with proper escaping
+        # BUILD_SCOPED_FILE_URL returns a scoped URL for the file in stage
+        query = f"""
+            SELECT {DATABASE}.{SCHEMA}.EXTRACT_PDF_TEXT(
+                BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{stage_name}, '{file_name_escaped}')
+            ) AS TEXT
+        """
+        
+        result = session.sql(query).collect()
         
         if result and len(result) > 0:
             return result[0]['TEXT']
@@ -160,7 +192,17 @@ def get_pdf_image_count_udf(file_name, stage_name):
         Number of images in PDF
     """
     try:
-        result = session.sql(f"SELECT {DATABASE}.{SCHEMA}.GET_PDF_IMAGE_COUNT(BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{stage_name}, '{file_name}')) AS COUNT").collect()
+        # Escape file name for safety
+        file_name_escaped = file_name.replace("'", "''")
+        
+        # Call the UDF with proper escaping
+        query = f"""
+            SELECT {DATABASE}.{SCHEMA}.GET_PDF_IMAGE_COUNT(
+                BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{stage_name}, '{file_name_escaped}')
+            ) AS COUNT
+        """
+        
+        result = session.sql(query).collect()
         
         if result and len(result) > 0:
             return result[0]['COUNT']
@@ -179,28 +221,38 @@ def save_text_to_table(file_name, text):
         text: Extracted text content
     """
     try:
+        from snowflake.snowpark import Row
+        from snowflake.snowpark.functions import lit
+        
         # Parse text by pages (if formatted with page markers)
         if '--- Page' in text:
             pages = text.split('--- Page')[1:]  # Skip first empty split
+            rows_to_insert = []
+            
             for page_content in pages:
                 lines = page_content.split('\n', 1)
                 if len(lines) >= 2:
-                    page_num = int(lines[0].strip().replace(' ---', ''))
-                    page_text = lines[1].strip().replace("'", "''")
-                    
-                    query = f"""
-                    INSERT INTO {DATABASE}.{SCHEMA}.{TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
-                    VALUES ('{file_name}', {page_num}, '{page_text}')
-                    """
-                    session.sql(query).collect()
+                    try:
+                        page_num = int(lines[0].strip().replace(' ---', ''))
+                        page_text = lines[1].strip()
+                        rows_to_insert.append((file_name, page_num, page_text))
+                    except (ValueError, IndexError):
+                        continue
+            
+            # Insert all rows using DataFrame API (safer than string concatenation)
+            if rows_to_insert:
+                df = session.create_dataframe(
+                    rows_to_insert,
+                    schema=["FILE_NAME", "PAGE_NUMBER", "EXTRACTED_TEXT"]
+                )
+                df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{TEXT_TABLE}")
         else:
             # Save as single page if no page markers
-            text_escaped = text.replace("'", "''")
-            query = f"""
-            INSERT INTO {DATABASE}.{SCHEMA}.{TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
-            VALUES ('{file_name}', 1, '{text_escaped}')
-            """
-            session.sql(query).collect()
+            df = session.create_dataframe(
+                [(file_name, 1, text)],
+                schema=["FILE_NAME", "PAGE_NUMBER", "EXTRACTED_TEXT"]
+            )
+            df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{TEXT_TABLE}")
         
         return True
     except Exception as e:
@@ -220,16 +272,19 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         Analysis results dictionary
     """
     try:
-        # Get text from PDF
-        text_result = session.sql(f"""
-            SELECT EXTRACTED_TEXT 
-            FROM {DATABASE}.{SCHEMA}.{TEXT_TABLE} 
-            WHERE FILE_NAME = '{file_name}'
-            ORDER BY PAGE_NUMBER
-            LIMIT 5
-        """).collect()
+        from snowflake.snowpark.functions import col, lit, call_function
+        
+        # Get text from PDF using DataFrame API (safer)
+        text_df = session.table(f"{DATABASE}.{SCHEMA}.{TEXT_TABLE}") \
+            .filter(col("FILE_NAME") == lit(file_name)) \
+            .select("EXTRACTED_TEXT") \
+            .order_by("PAGE_NUMBER") \
+            .limit(5)
+        
+        text_result = text_df.collect()
         
         if not text_result:
+            st.warning(f"No text found for file: {file_name}. Please extract text first.")
             return None
         
         # Combine text from multiple pages
@@ -238,19 +293,46 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         # Create prompt
         prompt = f"{ANALYSIS_PROMPT}\n\nContent to analyze:\n{combined_text}"
         
-        # Escape single quotes for SQL
-        prompt_escaped = prompt.replace("'", "''")
+        # Truncate prompt if too long (Cortex has token limits)
+        if len(prompt) > 10000:
+            prompt = prompt[:10000] + "\n\n[Content truncated due to length]"
         
-        # Call Cortex Complete API using SQL
-        cortex_query = f"""
-            SELECT SNOWFLAKE.CORTEX.COMPLETE(
-                '{model_name}',
-                '{prompt_escaped}'
-            ) AS RESPONSE
-        """
-        
-        response_result = session.sql(cortex_query).collect()
-        response = response_result[0]['RESPONSE'] if response_result else ""
+        # Call Cortex Complete using Snowpark call_function
+        # This is the recommended way to call Cortex functions from Python
+        try:
+            response_df = session.create_dataframe(
+                [(1,)],  # Dummy row
+                schema=["dummy"]
+            ).select(
+                call_function(
+                    "SNOWFLAKE.CORTEX.COMPLETE",
+                    lit(model_name),
+                    lit(prompt)
+                ).alias("RESPONSE")
+            )
+            
+            response_result = response_df.collect()
+            response = response_result[0]['RESPONSE'] if response_result else ""
+        except Exception as cortex_error:
+            st.error(f"Cortex API error: {str(cortex_error)}")
+            st.info("Trying alternative SQL-based approach...")
+            
+            # Fallback: Use SQL string approach (properly escaped)
+            # Note: This is less preferred but more compatible
+            prompt_escaped = prompt.replace("'", "''").replace("\\", "\\\\")
+            model_escaped = model_name.replace("'", "''")
+            
+            try:
+                response_result = session.sql(f"""
+                    SELECT SNOWFLAKE.CORTEX.COMPLETE(
+                        '{model_escaped}',
+                        '{prompt_escaped}'
+                    ) AS RESPONSE
+                """).collect()
+                response = response_result[0]['RESPONSE'] if response_result else ""
+            except Exception as fallback_error:
+                st.error(f"Both Cortex approaches failed: {str(fallback_error)}")
+                return None
         
         # Parse response
         try:
@@ -268,7 +350,8 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
                     "human_presence": {"detected": False, "confidence": 0, "description": "Could not parse"},
                     "potential_damage": {"detected": False, "confidence": 0, "description": "Could not parse"}
                 }
-        except:
+        except Exception as parse_error:
+            st.warning(f"Could not parse JSON response: {str(parse_error)}")
             analysis_json = {
                 "for_sale_sign": {"detected": False, "confidence": 0, "description": response[:200]},
                 "solar_panels": {"detected": False, "confidence": 0, "description": ""},
@@ -283,6 +366,8 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         
     except Exception as e:
         st.error(f"Error in Cortex analysis: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 def save_analysis_results(file_name, image_name, model_name, page_number, analysis_json, full_text):
@@ -295,27 +380,36 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         human = analysis_json.get("human_presence", {})
         damage = analysis_json.get("potential_damage", {})
         
-        query = f"""
-        INSERT INTO {DATABASE}.{SCHEMA}.{ANALYSIS_TABLE} (
-            FILE_NAME, IMAGE_NAME, MODEL_NAME, PAGE_NUMBER,
-            FOR_SALE_SIGN_DETECTED, FOR_SALE_SIGN_CONFIDENCE,
-            SOLAR_PANEL_DETECTED, SOLAR_PANEL_CONFIDENCE,
-            HUMAN_PRESENCE_DETECTED, HUMAN_PRESENCE_CONFIDENCE,
-            POTENTIAL_DAMAGE_DETECTED, POTENTIAL_DAMAGE_CONFIDENCE,
-            DAMAGE_DESCRIPTION, FULL_ANALYSIS_TEXT
-        )
-        VALUES (
-            '{file_name}', '{image_name}', '{model_name}', {page_number},
-            {str(for_sale.get('detected', False)).upper()}, {for_sale.get('confidence', 0)},
-            {str(solar.get('detected', False)).upper()}, {solar.get('confidence', 0)},
-            {str(human.get('detected', False)).upper()}, {human.get('confidence', 0)},
-            {str(damage.get('detected', False)).upper()}, {damage.get('confidence', 0)},
-            '{damage.get('description', '').replace("'", "''")}',
-            '{full_text[:500].replace("'", "''")}'
-        )
-        """
+        # Prepare data using DataFrame API (safer than SQL string concatenation)
+        data = [(
+            file_name,
+            image_name,
+            model_name,
+            page_number,
+            for_sale.get('detected', False),
+            float(for_sale.get('confidence', 0)),
+            solar.get('detected', False),
+            float(solar.get('confidence', 0)),
+            human.get('detected', False),
+            float(human.get('confidence', 0)),
+            damage.get('detected', False),
+            float(damage.get('confidence', 0)),
+            damage.get('description', ''),
+            full_text[:500]
+        )]
         
-        session.sql(query).collect()
+        schema = [
+            "FILE_NAME", "IMAGE_NAME", "MODEL_NAME", "PAGE_NUMBER",
+            "FOR_SALE_SIGN_DETECTED", "FOR_SALE_SIGN_CONFIDENCE",
+            "SOLAR_PANEL_DETECTED", "SOLAR_PANEL_CONFIDENCE",
+            "HUMAN_PRESENCE_DETECTED", "HUMAN_PRESENCE_CONFIDENCE",
+            "POTENTIAL_DAMAGE_DETECTED", "POTENTIAL_DAMAGE_CONFIDENCE",
+            "DAMAGE_DESCRIPTION", "FULL_ANALYSIS_TEXT"
+        ]
+        
+        df = session.create_dataframe(data, schema=schema)
+        df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{ANALYSIS_TABLE}")
+        
         return True
         
     except Exception as e:
@@ -325,13 +419,6 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
 # ================================================================
 # STREAMLIT UI
 # ================================================================
-
-# Page Configuration
-st.set_page_config(
-    page_title="PDF Processing & Image Analysis",
-    page_icon="📄",
-    layout="wide"
-)
 
 # Title and Description
 st.title("📄 PDF Processing & Image Analysis")
