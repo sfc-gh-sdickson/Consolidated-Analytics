@@ -146,68 +146,76 @@ def upload_pdf_to_stage(uploaded_file, stage_name):
         st.error(f"Error uploading file: {str(e)}")
         return False
 
-def extract_text_from_pdf_udf(file_name, stage_name):
+def extract_text_from_pdf_bytes(pdf_bytes, file_name):
     """
-    Extract text from PDF using Snowflake UDF
+    Extract text from PDF bytes directly in Streamlit
     
     Args:
-        file_name: Name of the PDF file
-        stage_name: Name of the stage where file is located
+        pdf_bytes: PDF file as bytes
+        file_name: Name of the PDF file (for reference)
         
     Returns:
         Extracted text string
     """
     try:
-        from snowflake.snowpark.functions import call_function, lit
+        import PyPDF2
+        import io
         
-        # Escape file name for safety
-        file_name_escaped = file_name.replace("'", "''")
+        # Create a BytesIO object from the bytes
+        pdf_file = io.BytesIO(pdf_bytes)
         
-        # Call the UDF - use fully qualified name with proper escaping
-        # BUILD_SCOPED_FILE_URL returns a scoped URL for the file in stage
-        query = f"""
-            SELECT {DATABASE}.{SCHEMA}.EXTRACT_PDF_TEXT(
-                BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{stage_name}, '{file_name_escaped}')
-            ) AS TEXT
-        """
+        # Read the PDF
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ''
         
-        result = session.sql(query).collect()
+        for page_num in range(len(reader.pages)):
+            page = reader.pages[page_num]
+            text += f'--- Page {page_num + 1} ---\n'
+            text += page.extract_text()
+            text += '\n\n'
         
-        if result and len(result) > 0:
-            return result[0]['TEXT']
-        else:
-            return "No text extracted"
+        return text if text.strip() else "No text could be extracted from PDF"
     except Exception as e:
         return f"Error: {str(e)}"
 
-def get_pdf_image_count_udf(file_name, stage_name):
+def get_pdf_image_count_bytes(pdf_bytes, file_name):
     """
-    Get count of images in PDF using Snowflake UDF
+    Get count of images in PDF from bytes directly in Streamlit
     
     Args:
-        file_name: Name of the PDF file
-        stage_name: Name of the stage where file is located
+        pdf_bytes: PDF file as bytes
+        file_name: Name of the PDF file (for reference)
         
     Returns:
         Number of images in PDF
     """
     try:
-        # Escape file name for safety
-        file_name_escaped = file_name.replace("'", "''")
+        import PyPDF2
+        import io
         
-        # Call the UDF with proper escaping
-        query = f"""
-            SELECT {DATABASE}.{SCHEMA}.GET_PDF_IMAGE_COUNT(
-                BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{stage_name}, '{file_name_escaped}')
-            ) AS COUNT
-        """
+        # Create a BytesIO object from the bytes
+        pdf_file = io.BytesIO(pdf_bytes)
         
-        result = session.sql(query).collect()
+        # Read the PDF
+        reader = PyPDF2.PdfReader(pdf_file)
+        image_count = 0
         
-        if result and len(result) > 0:
-            return result[0]['COUNT']
-        else:
-            return 0
+        for page in reader.pages:
+            # Check if page has resources
+            if '/Resources' in page:
+                resources = page['/Resources']
+                if '/XObject' in resources:
+                    xObject = resources['/XObject']
+                    if hasattr(xObject, 'get_object'):
+                        xObject = xObject.get_object()
+                    for obj_name in xObject:
+                        obj = xObject[obj_name]
+                        if hasattr(obj, 'get_object'):
+                            obj = obj.get_object()
+                        if '/Subtype' in obj and obj['/Subtype'] == '/Image':
+                            image_count += 1
+        
+        return image_count
     except Exception as e:
         st.error(f"Error getting image count: {str(e)}")
         return 0
@@ -474,81 +482,77 @@ with tab1:
     if uploaded_file is not None:
         st.success(f"✅ File uploaded: **{uploaded_file.name}**")
         
-        # Upload to stage button
-        if st.button("📤 Upload to Snowflake Stage", use_container_width=True):
-            with st.spinner(f"Uploading {uploaded_file.name} to Snowflake..."):
-                if upload_pdf_to_stage(uploaded_file, PDF_STAGE):
-                    st.success("✅ File uploaded to Snowflake stage successfully!")
-                    st.session_state['current_file'] = uploaded_file.name
+        # Store PDF bytes in session state
+        pdf_bytes = uploaded_file.getvalue()
+        st.session_state['current_file'] = uploaded_file.name
+        st.session_state['pdf_bytes'] = pdf_bytes
         
-        # If file is uploaded to stage, show processing options
-        if 'current_file' in st.session_state:
-            st.divider()
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("🔤 Extract Text", use_container_width=True):
-                    with st.spinner("Extracting text using Snowflake UDF..."):
-                        text = extract_text_from_pdf_udf(st.session_state['current_file'], PDF_STAGE)
-                        
-                        if text and not text.startswith("Error"):
-                            # Save to table
-                            if save_text_to_table(st.session_state['current_file'], text):
-                                st.success("✅ Text extracted and saved to Snowflake!")
-                                
-                                # Preview
-                                with st.expander("Preview Extracted Text"):
-                                    st.text_area("Text", text[:2000], height=300)
-                        else:
-                            st.error(f"Failed to extract text: {text}")
-            
-            with col2:
-                if st.button("🖼️ Get Image Info", use_container_width=True):
-                    with st.spinner("Getting image count..."):
-                        count = get_pdf_image_count_udf(st.session_state['current_file'], PDF_STAGE)
-                        st.info(f"Found **{count}** images in PDF")
-                        
-                        if count > 0:
-                            st.warning("Note: Image extraction requires manual processing. Use Cortex AI to analyze PDF content.")
-            
-            # Analyze button
-            st.divider()
-            st.subheader("🤖 Analyze PDF with Cortex AI")
-            
-            if st.button("▶️ Run Analysis", type="primary", use_container_width=True):
-                with st.spinner(f"Analyzing with {selected_model_name}..."):
-                    results = analyze_pdf_with_cortex(
-                        st.session_state['current_file'],
-                        selected_model,
-                        PDF_STAGE
-                    )
+        st.divider()
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔤 Extract Text", use_container_width=True):
+                with st.spinner("Extracting text from PDF..."):
+                    text = extract_text_from_pdf_bytes(pdf_bytes, uploaded_file.name)
                     
-                    if results:
-                        st.success("✅ Analysis complete!")
-                        
-                        # Show results
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            for_sale = results.get("for_sale_sign", {})
-                            if for_sale.get("detected"):
-                                st.metric("🏠 For Sale Sign", "YES", f"{for_sale.get('confidence', 0)}%")
-                        
-                        with col2:
-                            solar = results.get("solar_panels", {})
-                            if solar.get("detected"):
-                                st.metric("☀️ Solar Panels", "YES", f"{solar.get('confidence', 0)}%")
-                        
-                        with col3:
-                            human = results.get("human_presence", {})
-                            if human.get("detected"):
-                                st.metric("👥 Human Presence", "YES", f"{human.get('confidence', 0)}%")
-                        
-                        with col4:
-                            damage = results.get("potential_damage", {})
-                            if damage.get("detected"):
-                                st.metric("⚠️ Potential Damage", "YES", f"{damage.get('confidence', 0)}%")
+                    if text and not text.startswith("Error"):
+                        # Save to table
+                        if save_text_to_table(uploaded_file.name, text):
+                            st.success("✅ Text extracted and saved to Snowflake!")
+                            
+                            # Preview
+                            with st.expander("Preview Extracted Text"):
+                                st.text_area("Text", text[:2000], height=300)
+                    else:
+                        st.error(f"Failed to extract text: {text}")
+        
+        with col2:
+            if st.button("🖼️ Get Image Info", use_container_width=True):
+                with st.spinner("Counting images..."):
+                    count = get_pdf_image_count_bytes(pdf_bytes, uploaded_file.name)
+                    st.info(f"Found **{count}** images in PDF")
+                    
+                    if count > 0:
+                        st.warning("Note: Image extraction requires manual processing. Use Cortex AI to analyze PDF content.")
+        
+        # Analyze button
+        st.divider()
+        st.subheader("🤖 Analyze PDF with Cortex AI")
+        
+        if st.button("▶️ Run Analysis", type="primary", use_container_width=True):
+            with st.spinner(f"Analyzing with {selected_model_name}..."):
+                results = analyze_pdf_with_cortex(
+                    uploaded_file.name,
+                    selected_model,
+                    PDF_STAGE
+                )
+                
+                if results:
+                    st.success("✅ Analysis complete!")
+                    
+                    # Show results
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        for_sale = results.get("for_sale_sign", {})
+                        if for_sale.get("detected"):
+                            st.metric("🏠 For Sale Sign", "YES", f"{for_sale.get('confidence', 0)}%")
+                    
+                    with col2:
+                        solar = results.get("solar_panels", {})
+                        if solar.get("detected"):
+                            st.metric("☀️ Solar Panels", "YES", f"{solar.get('confidence', 0)}%")
+                    
+                    with col3:
+                        human = results.get("human_presence", {})
+                        if human.get("detected"):
+                            st.metric("👥 Human Presence", "YES", f"{human.get('confidence', 0)}%")
+                    
+                    with col4:
+                        damage = results.get("potential_damage", {})
+                        if damage.get("detected"):
+                            st.metric("⚠️ Potential Damage", "YES", f"{damage.get('confidence', 0)}%")
 
 # ================================================================
 # TAB 2: VIEW RESULTS
