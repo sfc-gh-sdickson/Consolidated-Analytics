@@ -188,10 +188,10 @@ def save_text_to_table(file_name, text):
                     page_num = int(lines[0].strip().replace(' ---', ''))
                     page_text = lines[1].strip().replace("'", "''")
                     
-            query = f"""
-            INSERT INTO {DATABASE}.{SCHEMA}.{TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
-            VALUES ('{file_name}', {page_num}, '{page_text}')
-            """
+                    query = f"""
+                    INSERT INTO {DATABASE}.{SCHEMA}.{TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
+                    VALUES ('{file_name}', {page_num}, '{page_text}')
+                    """
                     session.sql(query).collect()
         else:
             # Save as single page if no page markers
