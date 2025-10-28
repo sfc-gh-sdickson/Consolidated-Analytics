@@ -109,15 +109,17 @@ LANGUAGE PYTHON
 RUNTIME_VERSION = '3.10'
 HANDLER = 'extract_text'
 PACKAGES = ('pypdf2')
+IMPORTS = ('@PDF_FILES_STAGE')
 AS
 $$
 import PyPDF2
 import sys
-from snowflake.snowpark.files import SnowflakeFile
+import _snowflake
 
 def extract_text(file_path):
     try:
-        with SnowflakeFile.open(file_path, 'rb') as f:
+        # Use _snowflake to open the scoped file URL
+        with _snowflake.open(file_path, 'rb') as f:
             reader = PyPDF2.PdfReader(f)
             text = ''
             for page_num in range(len(reader.pages)):
@@ -138,14 +140,16 @@ LANGUAGE PYTHON
 RUNTIME_VERSION = '3.10'
 HANDLER = 'count_images'
 PACKAGES = ('pypdf2')
+IMPORTS = ('@PDF_FILES_STAGE')
 AS
 $$
 import PyPDF2
-from snowflake.snowpark.files import SnowflakeFile
+import _snowflake
 
 def count_images(file_path):
     try:
-        with SnowflakeFile.open(file_path, 'rb') as f:
+        # Use _snowflake to open the scoped file URL
+        with _snowflake.open(file_path, 'rb') as f:
             reader = PyPDF2.PdfReader(f)
             image_count = 0
             for page in reader.pages:
