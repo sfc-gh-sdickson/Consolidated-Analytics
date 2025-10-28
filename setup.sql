@@ -113,12 +113,18 @@ AS
 $$
 import PyPDF2
 import sys
-import _snowflake
+import urllib.request
+import io
 
 def extract_text(file_path):
     try:
-        with _snowflake.open(file_path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
+        # Open the scoped file URL
+        with urllib.request.urlopen(file_path) as response:
+            # Read the PDF data into memory
+            pdf_data = response.read()
+            pdf_file = io.BytesIO(pdf_data)
+            
+            reader = PyPDF2.PdfReader(pdf_file)
             text = ''
             for page_num in range(len(reader.pages)):
                 page = reader.pages[page_num]
@@ -141,19 +147,33 @@ PACKAGES = ('pypdf2')
 AS
 $$
 import PyPDF2
-import _snowflake
+import urllib.request
+import io
 
 def count_images(file_path):
     try:
-        with _snowflake.open(file_path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
+        # Open the scoped file URL
+        with urllib.request.urlopen(file_path) as response:
+            # Read the PDF data into memory
+            pdf_data = response.read()
+            pdf_file = io.BytesIO(pdf_data)
+            
+            reader = PyPDF2.PdfReader(pdf_file)
             image_count = 0
             for page in reader.pages:
-                if '/XObject' in page['/Resources']:
-                    xObject = page['/Resources']['/XObject'].get_object()
-                    for obj in xObject:
-                        if xObject[obj]['/Subtype'] == '/Image':
-                            image_count += 1
+                # Check if page has resources
+                if '/Resources' in page:
+                    resources = page['/Resources']
+                    if '/XObject' in resources:
+                        xObject = resources['/XObject']
+                        if hasattr(xObject, 'get_object'):
+                            xObject = xObject.get_object()
+                        for obj_name in xObject:
+                            obj = xObject[obj_name]
+                            if hasattr(obj, 'get_object'):
+                                obj = obj.get_object()
+                            if '/Subtype' in obj and obj['/Subtype'] == '/Image':
+                                image_count += 1
             return image_count
     except Exception as e:
         return 0
