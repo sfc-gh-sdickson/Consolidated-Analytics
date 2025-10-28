@@ -113,15 +113,14 @@ AS
 $$
 import PyPDF2
 import sys
-import urllib.request
 import io
 
 def extract_text(file_path):
     try:
-        # Open the scoped file URL
-        with urllib.request.urlopen(file_path) as response:
-            # Read the PDF data into memory
-            pdf_data = response.read()
+        # Use built-in open with the scoped file URL
+        # In Snowflake UDFs, open() is overridden to handle scoped URLs
+        with open(file_path, 'rb') as f:
+            pdf_data = f.read()
             pdf_file = io.BytesIO(pdf_data)
             
             reader = PyPDF2.PdfReader(pdf_file)
@@ -147,15 +146,13 @@ PACKAGES = ('pypdf2')
 AS
 $$
 import PyPDF2
-import urllib.request
 import io
 
 def count_images(file_path):
     try:
-        # Open the scoped file URL
-        with urllib.request.urlopen(file_path) as response:
-            # Read the PDF data into memory
-            pdf_data = response.read()
+        # Use built-in open with the scoped file URL
+        with open(file_path, 'rb') as f:
+            pdf_data = f.read()
             pdf_file = io.BytesIO(pdf_data)
             
             reader = PyPDF2.PdfReader(pdf_file)
