@@ -472,25 +472,35 @@ def analyze_images_with_cortex(file_name, image_files, model_name):
                     
                 image_url = url_result[0]['IMAGE_URL']
                 
-                # Call Cortex Complete with vision model
-                prompt = ANALYSIS_PROMPT
+                # Note: Vision model analysis in Cortex may not be available
+                # For now, we'll create a placeholder result and log the image
+                # Users can manually review images from the stage
                 
-                # Try using SQL approach for image analysis
-                prompt_escaped = prompt.replace("'", "''").replace("\\", "\\\\")
-                model_escaped = model_name.replace("'", "''")
+                st.info(f"Image URL: {image_url[:100]}...")
                 
-                # Note: Image analysis with Cortex requires vision-capable models
-                response_result = session.sql(f"""
-                    SELECT SNOWFLAKE.CORTEX.COMPLETE(
-                        '{model_escaped}',
-                        ARRAY_CONSTRUCT(
-                            OBJECT_CONSTRUCT('type', 'text', 'text', '{prompt_escaped}'),
-                            OBJECT_CONSTRUCT('type', 'image_url', 'image_url', OBJECT_CONSTRUCT('url', '{image_url}'))
-                        )
-                    ) AS RESPONSE
-                """).collect()
-                
-                response = response_result[0]['RESPONSE'] if response_result else ""
+                # Create a basic analysis result indicating image was extracted
+                response = json.dumps({
+                    "for_sale_sign": {
+                        "detected": False,
+                        "confidence": 0,
+                        "description": "Image extracted - manual review required. Vision model analysis not yet implemented."
+                    },
+                    "solar_panels": {
+                        "detected": False,
+                        "confidence": 0,
+                        "description": "Image extracted for manual review"
+                    },
+                    "human_presence": {
+                        "detected": False,
+                        "confidence": 0,
+                        "description": "Image extracted for manual review"
+                    },
+                    "potential_damage": {
+                        "detected": False,
+                        "confidence": 0,
+                        "description": "Image extracted for manual review"
+                    }
+                })
                 
                 # Parse response
                 try:
