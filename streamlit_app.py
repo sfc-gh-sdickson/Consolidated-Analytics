@@ -472,35 +472,29 @@ def analyze_images_with_cortex(file_name, image_files, model_name):
                     
                 image_url = url_result[0]['IMAGE_URL']
                 
-                # Note: Vision model analysis in Cortex may not be available
-                # For now, we'll create a placeholder result and log the image
-                # Users can manually review images from the stage
+                # Call Cortex Complete with vision model using proper multimodal syntax
+                prompt = ANALYSIS_PROMPT
+                prompt_escaped = prompt.replace("'", "''")
+                model_escaped = model_name.replace("'", "''")
+                image_url_escaped = image_url.replace("'", "''")
                 
-                st.info(f"Image URL: {image_url[:100]}...")
+                # Use the correct messages array format for multimodal
+                response_result = session.sql(f"""
+                    SELECT SNOWFLAKE.CORTEX.COMPLETE(
+                        '{model_escaped}',
+                        [
+                            {{
+                                'role': 'user',
+                                'content': [
+                                    {{'type': 'text', 'text': '{prompt_escaped}'}},
+                                    {{'type': 'image_url', 'image_url': '{image_url_escaped}'}}
+                                ]
+                            }}
+                        ]
+                    ) AS RESPONSE
+                """).collect()
                 
-                # Create a basic analysis result indicating image was extracted
-                response = json.dumps({
-                    "for_sale_sign": {
-                        "detected": False,
-                        "confidence": 0,
-                        "description": "Image extracted - manual review required. Vision model analysis not yet implemented."
-                    },
-                    "solar_panels": {
-                        "detected": False,
-                        "confidence": 0,
-                        "description": "Image extracted for manual review"
-                    },
-                    "human_presence": {
-                        "detected": False,
-                        "confidence": 0,
-                        "description": "Image extracted for manual review"
-                    },
-                    "potential_damage": {
-                        "detected": False,
-                        "confidence": 0,
-                        "description": "Image extracted for manual review"
-                    }
-                })
+                response = response_result[0]['RESPONSE'] if response_result else ""
                 
                 # Parse response
                 try:
