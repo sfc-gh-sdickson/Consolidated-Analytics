@@ -599,6 +599,22 @@ with st.sidebar:
     """)
     
     st.subheader("Model Selection")
+    
+    # Check available models
+    try:
+        available_check = session.sql("""
+            SELECT * FROM TABLE(INFORMATION_SCHEMA.CORTEX_MODELS())
+            WHERE MODEL_NAME IN ('claude-3-5-sonnet', 'gpt-4o', 'pixtral-large')
+        """).collect()
+        
+        if available_check:
+            available_model_names = [row['MODEL_NAME'] for row in available_check]
+            st.success(f"✅ Available models: {', '.join(available_model_names)}")
+        else:
+            st.warning("⚠️ Could not verify model availability. Check with: SELECT * FROM TABLE(INFORMATION_SCHEMA.CORTEX_MODELS())")
+    except Exception as e:
+        st.info(f"Model availability check: {str(e)}")
+    
     selected_model_name = st.selectbox(
         "Choose AI Model",
         list(AVAILABLE_MODELS.keys()),
