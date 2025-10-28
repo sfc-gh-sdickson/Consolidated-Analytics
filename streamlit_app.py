@@ -472,25 +472,24 @@ def analyze_images_with_cortex(file_name, image_files, model_name):
                     
                 image_url = url_result[0]['IMAGE_URL']
                 
-                # Call Cortex Complete with vision model using proper multimodal syntax
+                # Call Cortex Complete with vision model using Snowflake array functions
                 prompt = ANALYSIS_PROMPT
                 prompt_escaped = prompt.replace("'", "''")
                 model_escaped = model_name.replace("'", "''")
-                image_url_escaped = image_url.replace("'", "''")
                 
-                # Use the correct messages array format for multimodal
+                # Use ARRAY_CONSTRUCT and OBJECT_CONSTRUCT for proper Snowflake syntax
                 response_result = session.sql(f"""
                     SELECT SNOWFLAKE.CORTEX.COMPLETE(
                         '{model_escaped}',
-                        [
-                            {{
-                                'role': 'user',
-                                'content': [
-                                    {{'type': 'text', 'text': '{prompt_escaped}'}},
-                                    {{'type': 'image_url', 'image_url': '{image_url_escaped}'}}
-                                ]
-                            }}
-                        ]
+                        ARRAY_CONSTRUCT(
+                            OBJECT_CONSTRUCT(
+                                'role', 'user',
+                                'content', ARRAY_CONSTRUCT(
+                                    OBJECT_CONSTRUCT('type', 'text', 'text', '{prompt_escaped}'),
+                                    OBJECT_CONSTRUCT('type', 'image_url', 'image_url', '{image_url}')
+                                )
+                            )
+                        )
                     ) AS RESPONSE
                 """).collect()
                 
