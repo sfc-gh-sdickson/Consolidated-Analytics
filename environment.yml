@@ -1,0 +1,39 @@
+# ================================================================
+# Snowflake Environment Configuration for Streamlit in Snowflake
+# ================================================================
+# This file specifies the Python packages required for the
+# PDF Processing & Image Analysis application
+# ================================================================
+
+name: pdf_processing_app
+channels:
+  - snowflake
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python version
+  - python=3.10
+
+  # Core Streamlit (provided by Snowflake)
+  - streamlit>=1.28.0
+
+  # Snowflake packages (provided by Snowflake)
+  - snowflake-snowpark-python>=1.9.0
+
+  # PDF Processing
+  - pip:
+    - PyMuPDF>=1.23.0  # For PDF text and image extraction
+    - Pillow>=10.0.0   # For image processing
+    - pandas>=2.0.0    # For data manipulation
+    - numpy>=1.24.0    # For numerical operations
+
+# ================================================================
+# NOTES:
+# ================================================================
+# 1. Streamlit and snowflake-snowpark-python are pre-installed in SiS
+# 2. You only need to specify additional packages not included by default
+# 3. PyMuPDF (fitz) is the main library for PDF processing
+# 4. Pillow is used for image manipulation and display
+# ================================================================
+
