@@ -3,6 +3,9 @@
 # ================================================================
 # This file specifies the Python packages required for the
 # PDF Processing & Image Analysis application
+#
+# IMPORTANT: For SiS, most packages are pre-installed.
+# PDF processing is done via Snowflake UDFs, NOT in Streamlit code.
 # ================================================================
 
 name: pdf_processing_app
@@ -12,28 +15,28 @@ channels:
   - defaults
 
 dependencies:
-  # Python version
+  # Python version (provided by Snowflake)
   - python=3.10
 
-  # Core Streamlit (provided by Snowflake)
-  - streamlit>=1.28.0
-
-  # Snowflake packages (provided by Snowflake)
-  - snowflake-snowpark-python>=1.9.0
-
-  # PDF Processing
-  - pip:
-    - PyMuPDF>=1.23.0  # For PDF text and image extraction
-    - Pillow>=10.0.0   # For image processing
-    - pandas>=2.0.0    # For data manipulation
-    - numpy>=1.24.0    # For numerical operations
+# ================================================================
+# NO ADDITIONAL PACKAGES REQUIRED FOR STREAMLIT APP!
+# ================================================================
+# The Streamlit app uses ONLY packages pre-installed in SiS:
+#   - streamlit (pre-installed)
+#   - snowflake-snowpark-python (pre-installed)
+#   - pandas (pre-installed)
+#
+# PDF processing uses Snowflake Python UDFs with PyPDF2, which is
+# specified in the UDF definition (setup.sql), NOT here.
+# ================================================================
 
 # ================================================================
-# NOTES:
+# NOTES FOR SIS:
 # ================================================================
-# 1. Streamlit and snowflake-snowpark-python are pre-installed in SiS
-# 2. You only need to specify additional packages not included by default
-# 3. PyMuPDF (fitz) is the main library for PDF processing
-# 4. Pillow is used for image manipulation and display
+# 1. Streamlit and snowflake-snowpark-python are pre-installed
+# 2. pandas, numpy, and common data libraries are pre-installed
+# 3. PyPDF2 is available in UDF runtime (specified in PACKAGES clause)
+# 4. DO NOT add PyMuPDF - it's NOT available in SiS
+# 5. Image analysis uses Snowflake Cortex AI (no additional packages needed)
 # ================================================================
 

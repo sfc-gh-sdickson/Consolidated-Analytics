@@ -2,19 +2,19 @@
 PDF Processing & Image Analysis Application
 Streamlit in Snowflake (SiS) Application
 
-This application extracts text and images from PDF files, stores them in Snowflake,
-and uses Cortex AI models to analyze images for specific visual cues.
+This application extracts text and images from PDF files using Snowflake UDFs,
+stores them in Snowflake, and uses Cortex AI models to analyze images.
+
+IMPORTANT: Uses ONLY packages available in Streamlit in Snowflake
 """
 
 import streamlit as st
-import io
-import json
+import pandas as pd
 from datetime import datetime
 from snowflake.snowpark.context import get_active_session
-from snowflake.snowpark.functions import col
+from snowflake.snowpark import functions as F
 from snowflake.cortex import Complete
-import PyMuPDF as fitz  # PyMuPDF for PDF processing
-from PIL import Image
+import json
 
 # ================================================================
 # CONFIGURATION
@@ -35,13 +35,13 @@ AVAILABLE_MODELS = {
     "Pixtral Large (Mistral)": "pixtral-large"
 }
 
-# Analysis Prompts
+# Analysis Prompt Template
 ANALYSIS_PROMPT = """
-Analyze this property image and provide a detailed assessment for the following categories:
+Analyze this property image or PDF page and provide a detailed assessment for the following categories:
 
-1. **For Sale Sign**: Is there a "For Sale" sign visible in the image?
+1. **For Sale Sign**: Is there a "For Sale" sign visible?
 2. **Solar Panels**: Are there solar panels installed on the property?
-3. **Human Presence**: Are there any people visible in the image?
+3. **Human Presence**: Are there any people visible?
 4. **Potential Damage**: Is there any visible damage to the property (roof damage, broken windows, structural issues, etc.)?
 
 For each category, provide:
@@ -50,28 +50,30 @@ For each category, provide:
 - Brief description of what you observed
 
 Format your response as JSON with this structure:
-{
-    "for_sale_sign": {
+{{
+    "for_sale_sign": {{
         "detected": true/false,
         "confidence": 0-100,
         "description": "..."
-    },
-    "solar_panels": {
+    }},
+    "solar_panels": {{
         "detected": true/false,
         "confidence": 0-100,
         "description": "..."
-    },
-    "human_presence": {
+    }},
+    "human_presence": {{
         "detected": true/false,
         "confidence": 0-100,
         "description": "..."
-    },
-    "potential_damage": {
+    }},
+    "potential_damage": {{
         "detected": true/false,
         "confidence": 0-100,
         "description": "..."
-    }
-}
+    }}
+}}
+
+If this is a text page from a PDF, analyze the text content for mentions of these categories.
 """
 
 # ================================================================
@@ -86,217 +88,201 @@ def get_snowflake_session():
 session = get_snowflake_session()
 
 # Set context
-session.sql(f"USE DATABASE {DATABASE}").collect()
-session.sql(f"USE SCHEMA {SCHEMA}").collect()
+try:
+    session.sql(f"USE DATABASE {DATABASE}").collect()
+    session.sql(f"USE SCHEMA {SCHEMA}").collect()
+except Exception as e:
+    st.error(f"Error setting database context: {str(e)}")
+    st.stop()
 
 # ================================================================
 # HELPER FUNCTIONS
 # ================================================================
 
-def extract_text_from_pdf(pdf_file, file_name):
+def upload_pdf_to_stage(uploaded_file, stage_name):
     """
-    Extract text from PDF file and return as list of page data
+    Upload PDF file to Snowflake stage
     
     Args:
-        pdf_file: Uploaded PDF file object
-        file_name: Name of the PDF file
+        uploaded_file: Streamlit uploaded file object
+        stage_name: Name of the stage to upload to
         
     Returns:
-        List of dictionaries containing page text
+        Success boolean
     """
-    text_data = []
-    
     try:
-        # Open PDF
-        pdf_document = fitz.open(stream=pdf_file.read(), filetype="pdf")
+        # Write file to stage using Snowpark
+        file_bytes = uploaded_file.getvalue()
         
-        # Extract text from each page
-        for page_num in range(len(pdf_document)):
-            page = pdf_document[page_num]
-            text = page.get_text()
-            
-            if text.strip():  # Only add if there's actual text
-                text_data.append({
-                    'file_name': file_name,
-                    'page_number': page_num + 1,
-                    'text': text.replace("'", "''")  # Escape single quotes for SQL
-                })
+        # Create a temporary file path
+        stage_path = f"@{stage_name}/{uploaded_file.name}"
         
-        pdf_document.close()
-        return text_data
+        # Use PUT command to upload
+        put_result = session.file.put_stream(
+            uploaded_file,
+            stage_path,
+            auto_compress=False,
+            overwrite=True
+        )
         
+        return True
     except Exception as e:
-        st.error(f"Error extracting text: {str(e)}")
-        return []
+        st.error(f"Error uploading file: {str(e)}")
+        return False
 
-def extract_images_from_pdf(pdf_file, file_name):
+def extract_text_from_pdf_udf(file_name, stage_name):
     """
-    Extract images from PDF file
+    Extract text from PDF using Snowflake UDF
     
     Args:
-        pdf_file: Uploaded PDF file object
         file_name: Name of the PDF file
+        stage_name: Name of the stage where file is located
         
     Returns:
-        List of dictionaries containing image data
+        Extracted text string
     """
-    images_data = []
-    
     try:
-        # Open PDF
-        pdf_document = fitz.open(stream=pdf_file.read(), filetype="pdf")
+        file_path = f"@{stage_name}/{file_name}"
         
-        # Extract images from each page
-        for page_num in range(len(pdf_document)):
-            page = pdf_document[page_num]
-            image_list = page.get_images(full=True)
-            
-            for img_index, img in enumerate(image_list):
-                xref = img[0]
-                base_image = pdf_document.extract_image(xref)
-                image_bytes = base_image["image"]
-                image_ext = base_image["ext"]
-                
-                # Create image name
-                image_name = f"{file_name.replace('.pdf', '')}_page{page_num + 1}_img{img_index + 1}.{image_ext}"
-                
-                images_data.append({
-                    'file_name': file_name,
-                    'page_number': page_num + 1,
-                    'image_name': image_name,
-                    'image_bytes': image_bytes,
-                    'image_ext': image_ext
-                })
+        # Call the UDF
+        result = session.sql(f"SELECT EXTRACT_PDF_TEXT(BUILD_SCOPED_FILE_URL(@{stage_name}, '{file_name}')) AS TEXT").collect()
         
-        pdf_document.close()
-        return images_data
-        
+        if result and len(result) > 0:
+            return result[0]['TEXT']
+        else:
+            return "No text extracted"
     except Exception as e:
-        st.error(f"Error extracting images: {str(e)}")
-        return []
+        return f"Error: {str(e)}"
 
-def save_text_to_snowflake(text_data):
+def get_pdf_image_count_udf(file_name, stage_name):
+    """
+    Get count of images in PDF using Snowflake UDF
+    
+    Args:
+        file_name: Name of the PDF file
+        stage_name: Name of the stage where file is located
+        
+    Returns:
+        Number of images in PDF
+    """
+    try:
+        result = session.sql(f"SELECT GET_PDF_IMAGE_COUNT(BUILD_SCOPED_FILE_URL(@{stage_name}, '{file_name}')) AS COUNT").collect()
+        
+        if result and len(result) > 0:
+            return result[0]['COUNT']
+        else:
+            return 0
+    except Exception as e:
+        st.error(f"Error getting image count: {str(e)}")
+        return 0
+
+def save_text_to_table(file_name, text):
     """
     Save extracted text to Snowflake table
     
     Args:
-        text_data: List of dictionaries containing text data
+        file_name: Name of the PDF file
+        text: Extracted text content
     """
     try:
-        for record in text_data:
+        # Parse text by pages (if formatted with page markers)
+        if '--- Page' in text:
+            pages = text.split('--- Page')[1:]  # Skip first empty split
+            for page_content in pages:
+                lines = page_content.split('\n', 1)
+                if len(lines) >= 2:
+                    page_num = int(lines[0].strip().replace(' ---', ''))
+                    page_text = lines[1].strip().replace("'", "''")
+                    
+                    query = f"""
+                    INSERT INTO {TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
+                    VALUES ('{file_name}', {page_num}, '{page_text}')
+                    """
+                    session.sql(query).collect()
+        else:
+            # Save as single page if no page markers
+            text_escaped = text.replace("'", "''")
             query = f"""
             INSERT INTO {TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
-            VALUES ('{record['file_name']}', {record['page_number']}, '{record['text']}')
+            VALUES ('{file_name}', 1, '{text_escaped}')
             """
             session.sql(query).collect()
         
         return True
     except Exception as e:
-        st.error(f"Error saving text to Snowflake: {str(e)}")
+        st.error(f"Error saving text: {str(e)}")
         return False
 
-def save_images_to_stage(images_data):
+def analyze_pdf_with_cortex(file_name, model_name, stage_name):
     """
-    Save extracted images to Snowflake stage
+    Analyze PDF content using Snowflake Cortex AI
     
     Args:
-        images_data: List of dictionaries containing image data
-        
-    Returns:
-        List of successfully uploaded image names
-    """
-    uploaded_images = []
-    
-    try:
-        for img_data in images_data:
-            # Create BytesIO object from image bytes
-            image_stream = io.BytesIO(img_data['image_bytes'])
-            
-            # Upload to stage
-            stage_path = f"@{IMAGE_STAGE}/{img_data['image_name']}"
-            
-            # Use PUT command to upload
-            session.file.put_stream(
-                image_stream,
-                stage_path,
-                auto_compress=False,
-                overwrite=True
-            )
-            
-            uploaded_images.append(img_data['image_name'])
-        
-        return uploaded_images
-        
-    except Exception as e:
-        st.error(f"Error uploading images to stage: {str(e)}")
-        return uploaded_images
-
-def analyze_image_with_cortex(image_name, model_name, file_name, page_number):
-    """
-    Analyze image using Snowflake Cortex AI model
-    
-    Args:
-        image_name: Name of the image in stage
+        file_name: Name of the PDF file
         model_name: Cortex model identifier
-        file_name: Original PDF file name
-        page_number: Page number from PDF
+        stage_name: Stage where PDF is located
         
     Returns:
         Analysis results dictionary
     """
     try:
-        # Get image from stage
-        stage_path = f"@{IMAGE_STAGE}/{image_name}"
+        # Get text from PDF
+        text_result = session.sql(f"""
+            SELECT EXTRACTED_TEXT 
+            FROM {TEXT_TABLE} 
+            WHERE FILE_NAME = '{file_name}'
+            ORDER BY PAGE_NUMBER
+            LIMIT 5
+        """).collect()
         
-        # Read image from stage
-        result = session.sql(f"SELECT GET_PRESIGNED_URL({stage_path}, 60) as url").collect()
-        
-        if not result:
-            st.error(f"Could not get image from stage: {image_name}")
+        if not text_result:
             return None
         
-        # For now, we'll use Complete API with text-based models
-        # Note: Image analysis with Cortex requires specific setup
-        # This is a simplified version using text completion
+        # Combine text from multiple pages
+        combined_text = " ".join([row['EXTRACTED_TEXT'][:1000] for row in text_result])
         
-        prompt = f"""
-        Analyzing property image: {image_name}
-        
-        {ANALYSIS_PROMPT}
-        
-        Please analyze and respond in the JSON format specified above.
-        """
+        # Create prompt
+        prompt = f"{ANALYSIS_PROMPT}\n\nContent to analyze:\n{combined_text}"
         
         # Call Cortex Complete API
         response = Complete(model_name, prompt)
         
         # Parse response
         try:
-            analysis_json = json.loads(response)
+            # Try to extract JSON from response
+            if '{' in response:
+                json_start = response.index('{')
+                json_end = response.rindex('}') + 1
+                json_str = response[json_start:json_end]
+                analysis_json = json.loads(json_str)
+            else:
+                # Create default response
+                analysis_json = {
+                    "for_sale_sign": {"detected": False, "confidence": 0, "description": "Could not parse"},
+                    "solar_panels": {"detected": False, "confidence": 0, "description": "Could not parse"},
+                    "human_presence": {"detected": False, "confidence": 0, "description": "Could not parse"},
+                    "potential_damage": {"detected": False, "confidence": 0, "description": "Could not parse"}
+                }
         except:
-            # If response is not JSON, create structured response
             analysis_json = {
-                "for_sale_sign": {"detected": False, "confidence": 0, "description": "Analysis pending"},
-                "solar_panels": {"detected": False, "confidence": 0, "description": "Analysis pending"},
-                "human_presence": {"detected": False, "confidence": 0, "description": "Analysis pending"},
-                "potential_damage": {"detected": False, "confidence": 0, "description": "Analysis pending"}
+                "for_sale_sign": {"detected": False, "confidence": 0, "description": response[:200]},
+                "solar_panels": {"detected": False, "confidence": 0, "description": ""},
+                "human_presence": {"detected": False, "confidence": 0, "description": ""},
+                "potential_damage": {"detected": False, "confidence": 0, "description": ""}
             }
         
-        # Save results to database
-        save_analysis_results(
-            file_name, image_name, model_name, page_number,
-            analysis_json, response
-        )
+        # Save results
+        save_analysis_results(file_name, file_name, model_name, 1, analysis_json, response)
         
         return analysis_json
         
     except Exception as e:
-        st.error(f"Error analyzing image: {str(e)}")
+        st.error(f"Error in Cortex analysis: {str(e)}")
         return None
 
 def save_analysis_results(file_name, image_name, model_name, page_number, analysis_json, full_text):
     """
-    Save image analysis results to Snowflake table
+    Save analysis results to Snowflake table
     """
     try:
         for_sale = analysis_json.get("for_sale_sign", {})
@@ -315,12 +301,12 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         )
         VALUES (
             '{file_name}', '{image_name}', '{model_name}', {page_number},
-            {for_sale.get('detected', False)}, {for_sale.get('confidence', 0)},
-            {solar.get('detected', False)}, {solar.get('confidence', 0)},
-            {human.get('detected', False)}, {human.get('confidence', 0)},
-            {damage.get('detected', False)}, {damage.get('confidence', 0)},
+            {str(for_sale.get('detected', False)).upper()}, {for_sale.get('confidence', 0)},
+            {str(solar.get('detected', False)).upper()}, {solar.get('confidence', 0)},
+            {str(human.get('detected', False)).upper()}, {human.get('confidence', 0)},
+            {str(damage.get('detected', False)).upper()}, {damage.get('confidence', 0)},
             '{damage.get('description', '').replace("'", "''")}',
-            '{full_text.replace("'", "''")}'
+            '{full_text[:500].replace("'", "''")}'
         )
         """
         
@@ -328,7 +314,7 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         return True
         
     except Exception as e:
-        st.error(f"Error saving analysis results: {str(e)}")
+        st.error(f"Error saving analysis: {str(e)}")
         return False
 
 # ================================================================
@@ -345,8 +331,8 @@ st.set_page_config(
 # Title and Description
 st.title("📄 PDF Processing & Image Analysis")
 st.markdown("""
-This application extracts text and images from PDF files, stores them in Snowflake,
-and uses **Cortex AI models** to analyze images for property assessment.
+This application extracts text from PDF files using **Snowflake UDFs** and **Cortex AI models** for analysis.
+All processing happens within Snowflake - no external libraries required!
 """)
 
 # Sidebar Configuration
@@ -359,14 +345,14 @@ with st.sidebar:
     **Schema:** `{SCHEMA}`  
     **Text Table:** `{TEXT_TABLE}`  
     **Analysis Table:** `{ANALYSIS_TABLE}`  
-    **Image Stage:** `{IMAGE_STAGE}`
+    **PDF Stage:** `{PDF_STAGE}`
     """)
     
     st.subheader("Model Selection")
     selected_model_name = st.selectbox(
         "Choose AI Model",
         list(AVAILABLE_MODELS.keys()),
-        help="Select the Cortex AI model for image analysis"
+        help="Select the Cortex AI model for analysis"
     )
     selected_model = AVAILABLE_MODELS[selected_model_name]
     
@@ -379,7 +365,7 @@ with st.sidebar:
     """)
 
 # Main Content Area
-tab1, tab2, tab3 = st.tabs(["📤 Upload & Process", "📊 View Results", "🔍 Image Analysis"])
+tab1, tab2, tab3 = st.tabs(["📤 Upload & Process", "📊 View Results", "🔍 Analysis Results"])
 
 # ================================================================
 # TAB 1: UPLOAD & PROCESS
@@ -390,82 +376,87 @@ with tab1:
     uploaded_file = st.file_uploader(
         "Choose a PDF file",
         type=['pdf'],
-        help="Select a PDF file containing text and images"
+        help="Select a PDF file to process"
     )
     
     if uploaded_file is not None:
         st.success(f"✅ File uploaded: **{uploaded_file.name}**")
         
-        col1, col2 = st.columns(2)
+        # Upload to stage button
+        if st.button("📤 Upload to Snowflake Stage", use_container_width=True):
+            with st.spinner(f"Uploading {uploaded_file.name} to Snowflake..."):
+                if upload_pdf_to_stage(uploaded_file, PDF_STAGE):
+                    st.success("✅ File uploaded to Snowflake stage successfully!")
+                    st.session_state['current_file'] = uploaded_file.name
         
-        with col1:
-            if st.button("🔤 Extract Text", use_container_width=True):
-                with st.spinner("Extracting text from PDF..."):
-                    text_data = extract_text_from_pdf(uploaded_file, uploaded_file.name)
-                    
-                    if text_data:
-                        st.info(f"Found {len(text_data)} pages with text")
-                        
-                        # Save to Snowflake
-                        if save_text_to_snowflake(text_data):
-                            st.success(f"✅ Successfully saved text from {len(text_data)} pages to Snowflake!")
-                            
-                            # Preview
-                            with st.expander("Preview Extracted Text"):
-                                for page in text_data[:3]:  # Show first 3 pages
-                                    st.subheader(f"Page {page['page_number']}")
-                                    st.text(page['text'][:500] + "..." if len(page['text']) > 500 else page['text'])
-                    else:
-                        st.warning("No text found in PDF")
-        
-        with col2:
-            if st.button("🖼️ Extract Images", use_container_width=True):
-                with st.spinner("Extracting images from PDF..."):
-                    # Reset file pointer
-                    uploaded_file.seek(0)
-                    images_data = extract_images_from_pdf(uploaded_file, uploaded_file.name)
-                    
-                    if images_data:
-                        st.info(f"Found {len(images_data)} images")
-                        
-                        # Save to stage
-                        uploaded_images = save_images_to_stage(images_data)
-                        
-                        if uploaded_images:
-                            st.success(f"✅ Successfully uploaded {len(uploaded_images)} images to Snowflake stage!")
-                            
-                            # Store in session state for analysis
-                            st.session_state['uploaded_images'] = images_data
-                            st.session_state['uploaded_images_names'] = uploaded_images
-                    else:
-                        st.warning("No images found in PDF")
-        
-        # Analyze Images Button
-        if st.session_state.get('uploaded_images_names'):
+        # If file is uploaded to stage, show processing options
+        if 'current_file' in st.session_state:
             st.divider()
-            st.subheader("🤖 Analyze Extracted Images")
             
-            if st.button("▶️ Run Image Analysis", type="primary", use_container_width=True):
-                images_to_analyze = st.session_state.get('uploaded_images', [])
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                for idx, img_data in enumerate(images_to_analyze):
-                    status_text.text(f"Analyzing image {idx + 1} of {len(images_to_analyze)}: {img_data['image_name']}")
-                    
-                    # Analyze image
-                    analyze_image_with_cortex(
-                        img_data['image_name'],
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("🔤 Extract Text", use_container_width=True):
+                    with st.spinner("Extracting text using Snowflake UDF..."):
+                        text = extract_text_from_pdf_udf(st.session_state['current_file'], PDF_STAGE)
+                        
+                        if text and not text.startswith("Error"):
+                            # Save to table
+                            if save_text_to_table(st.session_state['current_file'], text):
+                                st.success("✅ Text extracted and saved to Snowflake!")
+                                
+                                # Preview
+                                with st.expander("Preview Extracted Text"):
+                                    st.text_area("Text", text[:2000], height=300)
+                        else:
+                            st.error(f"Failed to extract text: {text}")
+            
+            with col2:
+                if st.button("🖼️ Get Image Info", use_container_width=True):
+                    with st.spinner("Getting image count..."):
+                        count = get_pdf_image_count_udf(st.session_state['current_file'], PDF_STAGE)
+                        st.info(f"Found **{count}** images in PDF")
+                        
+                        if count > 0:
+                            st.warning("Note: Image extraction requires manual processing. Use Cortex AI to analyze PDF content.")
+            
+            # Analyze button
+            st.divider()
+            st.subheader("🤖 Analyze PDF with Cortex AI")
+            
+            if st.button("▶️ Run Analysis", type="primary", use_container_width=True):
+                with st.spinner(f"Analyzing with {selected_model_name}..."):
+                    results = analyze_pdf_with_cortex(
+                        st.session_state['current_file'],
                         selected_model,
-                        img_data['file_name'],
-                        img_data['page_number']
+                        PDF_STAGE
                     )
                     
-                    progress_bar.progress((idx + 1) / len(images_to_analyze))
-                
-                status_text.text("✅ Analysis complete!")
-                st.success(f"Successfully analyzed {len(images_to_analyze)} images using {selected_model_name}!")
+                    if results:
+                        st.success("✅ Analysis complete!")
+                        
+                        # Show results
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            for_sale = results.get("for_sale_sign", {})
+                            if for_sale.get("detected"):
+                                st.metric("🏠 For Sale Sign", "YES", f"{for_sale.get('confidence', 0)}%")
+                        
+                        with col2:
+                            solar = results.get("solar_panels", {})
+                            if solar.get("detected"):
+                                st.metric("☀️ Solar Panels", "YES", f"{solar.get('confidence', 0)}%")
+                        
+                        with col3:
+                            human = results.get("human_presence", {})
+                            if human.get("detected"):
+                                st.metric("👥 Human Presence", "YES", f"{human.get('confidence', 0)}%")
+                        
+                        with col4:
+                            damage = results.get("potential_damage", {})
+                            if damage.get("detected"):
+                                st.metric("⚠️ Potential Damage", "YES", f"{damage.get('confidence', 0)}%")
 
 # ================================================================
 # TAB 2: VIEW RESULTS
@@ -479,69 +470,77 @@ with tab2:
         st.subheader("📝 Extracted Text")
         
         # Query text data
-        text_query = f"SELECT * FROM {TEXT_TABLE} ORDER BY UPLOAD_TIMESTAMP DESC LIMIT 100"
-        text_df = session.sql(text_query).to_pandas()
-        
-        if not text_df.empty:
-            st.metric("Total Text Records", len(text_df))
-            st.dataframe(text_df, use_container_width=True)
+        try:
+            text_df = session.sql(f"SELECT * FROM {TEXT_TABLE} ORDER BY UPLOAD_TIMESTAMP DESC LIMIT 100").to_pandas()
             
-            # Download option
-            csv = text_df.to_csv(index=False)
-            st.download_button(
-                label="📥 Download Text Data",
-                data=csv,
-                file_name=f"extracted_text_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-        else:
-            st.info("No text data available yet. Upload and process a PDF file first.")
+            if not text_df.empty:
+                st.metric("Total Text Records", len(text_df))
+                st.dataframe(text_df, use_container_width=True, height=400)
+                
+                # Download option
+                csv = text_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Text Data",
+                    data=csv,
+                    file_name=f"extracted_text_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("No text data available. Upload and process a PDF first.")
+        except Exception as e:
+            st.error(f"Error loading text data: {str(e)}")
     
     with col2:
-        st.subheader("🖼️ Extracted Images")
+        st.subheader("📁 PDF Files")
         
         # List files in stage
-        stage_query = f"LIST @{IMAGE_STAGE}"
         try:
-            stage_df = session.sql(stage_query).to_pandas()
+            stage_result = session.sql(f"LIST @{PDF_STAGE}").collect()
             
-            if not stage_df.empty:
-                st.metric("Total Images", len(stage_df))
-                st.dataframe(stage_df[['name', 'size', 'last_modified']], use_container_width=True)
+            if stage_result:
+                file_list = []
+                for row in stage_result:
+                    file_list.append({
+                        'name': row['name'].split('/')[-1],
+                        'size': f"{row['size'] / 1024:.2f} KB",
+                        'last_modified': row['last_modified']
+                    })
+                
+                file_df = pd.DataFrame(file_list)
+                st.metric("Total PDF Files", len(file_df))
+                st.dataframe(file_df, use_container_width=True, height=400)
             else:
-                st.info("No images available yet. Upload and process a PDF file first.")
-        except:
-            st.info("No images available yet. Upload and process a PDF file first.")
+                st.info("No files in stage. Upload a PDF first.")
+        except Exception as e:
+            st.error(f"Error listing stage: {str(e)}")
 
 # ================================================================
-# TAB 3: IMAGE ANALYSIS RESULTS
+# TAB 3: ANALYSIS RESULTS
 # ================================================================
 with tab3:
-    st.header("🔍 Image Analysis Results")
+    st.header("🔍 Analysis Results")
     
     # Query analysis data
-    analysis_query = f"""
-    SELECT 
-        FILE_NAME,
-        IMAGE_NAME,
-        MODEL_NAME,
-        PAGE_NUMBER,
-        FOR_SALE_SIGN_DETECTED,
-        FOR_SALE_SIGN_CONFIDENCE,
-        SOLAR_PANEL_DETECTED,
-        SOLAR_PANEL_CONFIDENCE,
-        HUMAN_PRESENCE_DETECTED,
-        HUMAN_PRESENCE_CONFIDENCE,
-        POTENTIAL_DAMAGE_DETECTED,
-        POTENTIAL_DAMAGE_CONFIDENCE,
-        DAMAGE_DESCRIPTION,
-        ANALYSIS_TIMESTAMP
-    FROM {ANALYSIS_TABLE}
-    ORDER BY ANALYSIS_TIMESTAMP DESC
-    """
-    
     try:
-        analysis_df = session.sql(analysis_query).to_pandas()
+        analysis_df = session.sql(f"""
+            SELECT 
+                FILE_NAME,
+                IMAGE_NAME,
+                MODEL_NAME,
+                PAGE_NUMBER,
+                FOR_SALE_SIGN_DETECTED,
+                FOR_SALE_SIGN_CONFIDENCE,
+                SOLAR_PANEL_DETECTED,
+                SOLAR_PANEL_CONFIDENCE,
+                HUMAN_PRESENCE_DETECTED,
+                HUMAN_PRESENCE_CONFIDENCE,
+                POTENTIAL_DAMAGE_DETECTED,
+                POTENTIAL_DAMAGE_CONFIDENCE,
+                DAMAGE_DESCRIPTION,
+                ANALYSIS_TIMESTAMP
+            FROM {ANALYSIS_TABLE}
+            ORDER BY ANALYSIS_TIMESTAMP DESC
+        """).to_pandas()
         
         if not analysis_df.empty:
             # Summary metrics
@@ -574,52 +573,19 @@ with tab3:
             st.download_button(
                 label="📥 Download Analysis Results",
                 data=csv,
-                file_name=f"image_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                file_name=f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
             )
-            
-            # Filter by detections
-            st.divider()
-            st.subheader("Filter Results")
-            
-            filter_col1, filter_col2 = st.columns(2)
-            
-            with filter_col1:
-                show_for_sale = st.checkbox("Show only For Sale signs")
-                show_solar = st.checkbox("Show only Solar Panels")
-            
-            with filter_col2:
-                show_humans = st.checkbox("Show only Human Presence")
-                show_damage = st.checkbox("Show only Potential Damage")
-            
-            # Apply filters
-            filtered_df = analysis_df.copy()
-            if show_for_sale:
-                filtered_df = filtered_df[filtered_df['FOR_SALE_SIGN_DETECTED'] == True]
-            if show_solar:
-                filtered_df = filtered_df[filtered_df['SOLAR_PANEL_DETECTED'] == True]
-            if show_humans:
-                filtered_df = filtered_df[filtered_df['HUMAN_PRESENCE_DETECTED'] == True]
-            if show_damage:
-                filtered_df = filtered_df[filtered_df['POTENTIAL_DAMAGE_DETECTED'] == True]
-            
-            if not filtered_df.empty:
-                st.dataframe(filtered_df, use_container_width=True)
-            else:
-                st.info("No results match the selected filters")
-                
         else:
-            st.info("No analysis results available yet. Upload a PDF and run image analysis first.")
+            st.info("No analysis results available. Process a PDF and run analysis first.")
             
     except Exception as e:
         st.error(f"Error loading analysis results: {str(e)}")
-        st.info("No analysis results available yet. Upload a PDF and run image analysis first.")
 
 # Footer
 st.divider()
 st.markdown("""
 ---
 **PDF Processing & Image Analysis** | Powered by Snowflake Cortex AI  
-💡 For support, contact your Snowflake administrator
+Uses Snowflake UDFs (PyPDF2) for PDF processing - No external dependencies!
 """)
-
