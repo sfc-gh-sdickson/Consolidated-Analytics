@@ -543,35 +543,34 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         human = analysis_json.get("human_presence", {})
         damage = analysis_json.get("potential_damage", {})
         
-        # Prepare data using DataFrame API (safer than SQL string concatenation)
-        data = [(
-            file_name,
-            image_name,
-            model_name,
-            page_number,
-            for_sale.get('detected', False),
-            float(for_sale.get('confidence', 0)),
-            solar.get('detected', False),
-            float(solar.get('confidence', 0)),
-            human.get('detected', False),
-            float(human.get('confidence', 0)),
-            damage.get('detected', False),
-            float(damage.get('confidence', 0)),
-            damage.get('description', ''),
-            full_text[:500]
-        )]
+        # Escape strings for SQL
+        file_name_escaped = file_name.replace("'", "''")
+        image_name_escaped = image_name.replace("'", "''")
+        model_name_escaped = model_name.replace("'", "''")
+        damage_desc_escaped = damage.get('description', '').replace("'", "''")
+        full_text_escaped = full_text[:500].replace("'", "''")
         
-        schema = [
-            "FILE_NAME", "IMAGE_NAME", "MODEL_NAME", "PAGE_NUMBER",
-            "FOR_SALE_SIGN_DETECTED", "FOR_SALE_SIGN_CONFIDENCE",
-            "SOLAR_PANEL_DETECTED", "SOLAR_PANEL_CONFIDENCE",
-            "HUMAN_PRESENCE_DETECTED", "HUMAN_PRESENCE_CONFIDENCE",
-            "POTENTIAL_DAMAGE_DETECTED", "POTENTIAL_DAMAGE_CONFIDENCE",
-            "DAMAGE_DESCRIPTION", "FULL_ANALYSIS_TEXT"
-        ]
+        # Use explicit INSERT with column names
+        query = f"""
+        INSERT INTO {DATABASE}.{SCHEMA}.{ANALYSIS_TABLE} (
+            FILE_NAME, IMAGE_NAME, MODEL_NAME, PAGE_NUMBER,
+            FOR_SALE_SIGN_DETECTED, FOR_SALE_SIGN_CONFIDENCE,
+            SOLAR_PANEL_DETECTED, SOLAR_PANEL_CONFIDENCE,
+            HUMAN_PRESENCE_DETECTED, HUMAN_PRESENCE_CONFIDENCE,
+            POTENTIAL_DAMAGE_DETECTED, POTENTIAL_DAMAGE_CONFIDENCE,
+            DAMAGE_DESCRIPTION, FULL_ANALYSIS_TEXT, METADATA
+        )
+        VALUES (
+            '{file_name_escaped}', '{image_name_escaped}', '{model_name_escaped}', {page_number},
+            {str(for_sale.get('detected', False)).upper()}, {float(for_sale.get('confidence', 0))},
+            {str(solar.get('detected', False)).upper()}, {float(solar.get('confidence', 0))},
+            {str(human.get('detected', False)).upper()}, {float(human.get('confidence', 0))},
+            {str(damage.get('detected', False)).upper()}, {float(damage.get('confidence', 0))},
+            '{damage_desc_escaped}', '{full_text_escaped}', NULL
+        )
+        """
         
-        df = session.create_dataframe(data, schema=schema)
-        df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{ANALYSIS_TABLE}")
+        session.sql(query).collect()
         
         return True
         
