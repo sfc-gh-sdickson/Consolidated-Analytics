@@ -13,7 +13,6 @@ import pandas as pd
 from datetime import datetime
 from snowflake.snowpark.context import get_active_session
 from snowflake.snowpark import functions as F
-from snowflake.cortex import Complete
 import json
 
 # ================================================================
@@ -244,8 +243,19 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         # Create prompt
         prompt = f"{ANALYSIS_PROMPT}\n\nContent to analyze:\n{combined_text}"
         
-        # Call Cortex Complete API
-        response = Complete(model_name, prompt)
+        # Escape single quotes for SQL
+        prompt_escaped = prompt.replace("'", "''")
+        
+        # Call Cortex Complete API using SQL
+        cortex_query = f"""
+            SELECT SNOWFLAKE.CORTEX.COMPLETE(
+                '{model_name}',
+                '{prompt_escaped}'
+            ) AS RESPONSE
+        """
+        
+        response_result = session.sql(cortex_query).collect()
+        response = response_result[0]['RESPONSE'] if response_result else ""
         
         # Parse response
         try:
