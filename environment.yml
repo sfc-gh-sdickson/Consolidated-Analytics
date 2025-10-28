@@ -14,8 +14,9 @@ channels:
 
 dependencies:
   # Python version (provided by Snowflake)
-  # Note: Use 3.11 (available versions: 3.8, 3.9, 3.11, 3.12, 3.13 - NOT 3.10)
-  - python=3.11
+  # Note: Use 3.9 - most stable and universally available
+  # Available versions vary by account: typically 3.8, 3.9, 3.10, 3.12, 3.13
+  - python=3.9
 
 # ================================================================
 # NO ADDITIONAL PACKAGES REQUIRED FOR STREAMLIT APP!
