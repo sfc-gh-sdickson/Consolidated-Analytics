@@ -460,36 +460,18 @@ def analyze_images_with_cortex(file_name, image_files, model_name):
             st.write(f"Analyzing image {img_idx}/{len(image_files)}: {image_name}")
             
             try:
-                # Build scoped URL for the image
-                image_url_query = f"""
-                    SELECT BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}, '{image_name}') AS IMAGE_URL
-                """
-                url_result = session.sql(image_url_query).collect()
-                
-                if not url_result:
-                    st.warning(f"Could not get URL for {image_name}")
-                    continue
-                    
-                image_url = url_result[0]['IMAGE_URL']
-                
-                # Call Cortex Complete with vision model using Snowflake array functions
+                # For multimodal COMPLETE, use TO_FILE to convert stage path to FILE object
+                # Syntax: COMPLETE(model, prompt, TO_FILE(@stage, 'filename'))
                 prompt = ANALYSIS_PROMPT
                 prompt_escaped = prompt.replace("'", "''")
                 model_escaped = model_name.replace("'", "''")
                 
-                # Use ARRAY_CONSTRUCT and OBJECT_CONSTRUCT for proper Snowflake syntax
+                # Call COMPLETE with three arguments: model (VARCHAR), prompt (VARCHAR), file (FILE)
                 response_result = session.sql(f"""
                     SELECT SNOWFLAKE.CORTEX.COMPLETE(
                         '{model_escaped}',
-                        ARRAY_CONSTRUCT(
-                            OBJECT_CONSTRUCT(
-                                'role', 'user',
-                                'content', ARRAY_CONSTRUCT(
-                                    OBJECT_CONSTRUCT('type', 'text', 'text', '{prompt_escaped}'),
-                                    OBJECT_CONSTRUCT('type', 'image_url', 'image_url', '{image_url}')
-                                )
-                            )
-                        )
+                        '{prompt_escaped}',
+                        TO_FILE(@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}, '{image_name}')
                     ) AS RESPONSE
                 """).collect()
                 
