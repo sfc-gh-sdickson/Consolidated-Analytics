@@ -108,29 +108,30 @@ RETURNS STRING
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.10'
 HANDLER = 'extract_text'
-PACKAGES = ('pypdf2')
+PACKAGES = ('pypdf2', 'requests')
 AS
 $$
 import PyPDF2
 import sys
 import io
+import requests
 
 def extract_text(file_path):
     try:
-        # Use built-in open with the scoped file URL
-        # In Snowflake UDFs, open() is overridden to handle scoped URLs
-        with open(file_path, 'rb') as f:
-            pdf_data = f.read()
-            pdf_file = io.BytesIO(pdf_data)
-            
-            reader = PyPDF2.PdfReader(pdf_file)
-            text = ''
-            for page_num in range(len(reader.pages)):
-                page = reader.pages[page_num]
-                text += f'--- Page {page_num + 1} ---\n'
-                text += page.extract_text()
-                text += '\n\n'
-            return text
+        # Use requests to fetch the scoped file URL
+        response = requests.get(file_path)
+        response.raise_for_status()
+        pdf_data = response.content
+        pdf_file = io.BytesIO(pdf_data)
+        
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ''
+        for page_num in range(len(reader.pages)):
+            page = reader.pages[page_num]
+            text += f'--- Page {page_num + 1} ---\n'
+            text += page.extract_text()
+            text += '\n\n'
+        return text
     except Exception as e:
         return f'Error extracting text: {str(e)}'
 $$;
@@ -142,36 +143,38 @@ RETURNS NUMBER
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.10'
 HANDLER = 'count_images'
-PACKAGES = ('pypdf2')
+PACKAGES = ('pypdf2', 'requests')
 AS
 $$
 import PyPDF2
 import io
+import requests
 
 def count_images(file_path):
     try:
-        # Use built-in open with the scoped file URL
-        with open(file_path, 'rb') as f:
-            pdf_data = f.read()
-            pdf_file = io.BytesIO(pdf_data)
-            
-            reader = PyPDF2.PdfReader(pdf_file)
-            image_count = 0
-            for page in reader.pages:
-                # Check if page has resources
-                if '/Resources' in page:
-                    resources = page['/Resources']
-                    if '/XObject' in resources:
-                        xObject = resources['/XObject']
-                        if hasattr(xObject, 'get_object'):
-                            xObject = xObject.get_object()
-                        for obj_name in xObject:
-                            obj = xObject[obj_name]
-                            if hasattr(obj, 'get_object'):
-                                obj = obj.get_object()
-                            if '/Subtype' in obj and obj['/Subtype'] == '/Image':
-                                image_count += 1
-            return image_count
+        # Use requests to fetch the scoped file URL
+        response = requests.get(file_path)
+        response.raise_for_status()
+        pdf_data = response.content
+        pdf_file = io.BytesIO(pdf_data)
+        
+        reader = PyPDF2.PdfReader(pdf_file)
+        image_count = 0
+        for page in reader.pages:
+            # Check if page has resources
+            if '/Resources' in page:
+                resources = page['/Resources']
+                if '/XObject' in resources:
+                    xObject = resources['/XObject']
+                    if hasattr(xObject, 'get_object'):
+                        xObject = xObject.get_object()
+                    for obj_name in xObject:
+                        obj = xObject[obj_name]
+                        if hasattr(obj, 'get_object'):
+                            obj = obj.get_object()
+                        if '/Subtype' in obj and obj['/Subtype'] == '/Image':
+                            image_count += 1
+        return image_count
     except Exception as e:
         return 0
 $$;
