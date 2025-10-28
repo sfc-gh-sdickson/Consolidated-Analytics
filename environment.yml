@@ -12,10 +12,9 @@ name: pdf_processing_app
 channels:
   - snowflake
 
-dependencies:
-  # Python version (provided by Snowflake)
-  # Note: Using 3.8 - the ONLY version consistently available across all checks
-  - python=3.8
+dependencies: []
+  # NO Python version specified - Streamlit in Snowflake manages this automatically
+  # UDF Python versions are specified separately in the CREATE FUNCTION statements
 
 # ================================================================
 # NO ADDITIONAL PACKAGES REQUIRED FOR STREAMLIT APP!
