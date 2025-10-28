@@ -86,13 +86,8 @@ def get_snowflake_session():
 
 session = get_snowflake_session()
 
-# Set context
-try:
-    session.sql(f"USE DATABASE {DATABASE}").collect()
-    session.sql(f"USE SCHEMA {SCHEMA}").collect()
-except Exception as e:
-    st.error(f"Error setting database context: {str(e)}")
-    st.stop()
+# Set context - use fully qualified names instead of USE statements
+# USE DATABASE/SCHEMA not supported in SiS, so we'll use fully qualified table names throughout
 
 # ================================================================
 # HELPER FUNCTIONS
@@ -114,7 +109,7 @@ def upload_pdf_to_stage(uploaded_file, stage_name):
         file_bytes = uploaded_file.getvalue()
         
         # Create a temporary file path
-        stage_path = f"@{stage_name}/{uploaded_file.name}"
+        stage_path = f"@{DATABASE}.{SCHEMA}.{stage_name}/{uploaded_file.name}"
         
         # Use PUT command to upload
         put_result = session.file.put_stream(
@@ -143,8 +138,8 @@ def extract_text_from_pdf_udf(file_name, stage_name):
     try:
         file_path = f"@{stage_name}/{file_name}"
         
-        # Call the UDF
-        result = session.sql(f"SELECT EXTRACT_PDF_TEXT(BUILD_SCOPED_FILE_URL(@{stage_name}, '{file_name}')) AS TEXT").collect()
+        # Call the UDF - use fully qualified name
+        result = session.sql(f"SELECT {DATABASE}.{SCHEMA}.EXTRACT_PDF_TEXT(BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{stage_name}, '{file_name}')) AS TEXT").collect()
         
         if result and len(result) > 0:
             return result[0]['TEXT']
@@ -165,7 +160,7 @@ def get_pdf_image_count_udf(file_name, stage_name):
         Number of images in PDF
     """
     try:
-        result = session.sql(f"SELECT GET_PDF_IMAGE_COUNT(BUILD_SCOPED_FILE_URL(@{stage_name}, '{file_name}')) AS COUNT").collect()
+        result = session.sql(f"SELECT {DATABASE}.{SCHEMA}.GET_PDF_IMAGE_COUNT(BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{stage_name}, '{file_name}')) AS COUNT").collect()
         
         if result and len(result) > 0:
             return result[0]['COUNT']
@@ -193,16 +188,16 @@ def save_text_to_table(file_name, text):
                     page_num = int(lines[0].strip().replace(' ---', ''))
                     page_text = lines[1].strip().replace("'", "''")
                     
-                    query = f"""
-                    INSERT INTO {TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
-                    VALUES ('{file_name}', {page_num}, '{page_text}')
-                    """
+            query = f"""
+            INSERT INTO {DATABASE}.{SCHEMA}.{TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
+            VALUES ('{file_name}', {page_num}, '{page_text}')
+            """
                     session.sql(query).collect()
         else:
             # Save as single page if no page markers
             text_escaped = text.replace("'", "''")
             query = f"""
-            INSERT INTO {TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
+            INSERT INTO {DATABASE}.{SCHEMA}.{TEXT_TABLE} (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT)
             VALUES ('{file_name}', 1, '{text_escaped}')
             """
             session.sql(query).collect()
@@ -228,7 +223,7 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         # Get text from PDF
         text_result = session.sql(f"""
             SELECT EXTRACTED_TEXT 
-            FROM {TEXT_TABLE} 
+            FROM {DATABASE}.{SCHEMA}.{TEXT_TABLE} 
             WHERE FILE_NAME = '{file_name}'
             ORDER BY PAGE_NUMBER
             LIMIT 5
@@ -301,7 +296,7 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         damage = analysis_json.get("potential_damage", {})
         
         query = f"""
-        INSERT INTO {ANALYSIS_TABLE} (
+        INSERT INTO {DATABASE}.{SCHEMA}.{ANALYSIS_TABLE} (
             FILE_NAME, IMAGE_NAME, MODEL_NAME, PAGE_NUMBER,
             FOR_SALE_SIGN_DETECTED, FOR_SALE_SIGN_CONFIDENCE,
             SOLAR_PANEL_DETECTED, SOLAR_PANEL_CONFIDENCE,
@@ -481,7 +476,7 @@ with tab2:
         
         # Query text data
         try:
-            text_df = session.sql(f"SELECT * FROM {TEXT_TABLE} ORDER BY UPLOAD_TIMESTAMP DESC LIMIT 100").to_pandas()
+            text_df = session.sql(f"SELECT * FROM {DATABASE}.{SCHEMA}.{TEXT_TABLE} ORDER BY UPLOAD_TIMESTAMP DESC LIMIT 100").to_pandas()
             
             if not text_df.empty:
                 st.metric("Total Text Records", len(text_df))
@@ -505,7 +500,7 @@ with tab2:
         
         # List files in stage
         try:
-            stage_result = session.sql(f"LIST @{PDF_STAGE}").collect()
+            stage_result = session.sql(f"LIST @{DATABASE}.{SCHEMA}.{PDF_STAGE}").collect()
             
             if stage_result:
                 file_list = []
@@ -548,7 +543,7 @@ with tab3:
                 POTENTIAL_DAMAGE_CONFIDENCE,
                 DAMAGE_DESCRIPTION,
                 ANALYSIS_TIMESTAMP
-            FROM {ANALYSIS_TABLE}
+            FROM {DATABASE}.{SCHEMA}.{ANALYSIS_TABLE}
             ORDER BY ANALYSIS_TIMESTAMP DESC
         """).to_pandas()
         
