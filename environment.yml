@@ -11,8 +11,6 @@
 name: pdf_processing_app
 channels:
   - snowflake
-  - conda-forge
-  - defaults
 
 dependencies:
   # Python version (provided by Snowflake)
@@ -38,5 +36,6 @@ dependencies:
 # 3. PyPDF2 is available in UDF runtime (specified in PACKAGES clause)
 # 4. DO NOT add PyMuPDF - it's NOT available in SiS
 # 5. Image analysis uses Snowflake Cortex AI (no additional packages needed)
+# 6. ONLY use 'snowflake' channel - conda-forge and defaults are NOT supported
 # ================================================================
 
