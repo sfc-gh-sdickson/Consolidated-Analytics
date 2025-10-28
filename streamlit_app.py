@@ -243,7 +243,7 @@ def save_text_to_table(file_name, text):
                     try:
                         page_num = int(lines[0].strip().replace(' ---', ''))
                         page_text = lines[1].strip()
-                        rows_to_insert.append((file_name, page_num, page_text))
+                        rows_to_insert.append((file_name, page_num, page_text, None))
                     except (ValueError, IndexError):
                         continue
             
@@ -251,14 +251,14 @@ def save_text_to_table(file_name, text):
             if rows_to_insert:
                 df = session.create_dataframe(
                     rows_to_insert,
-                    schema=["FILE_NAME", "PAGE_NUMBER", "EXTRACTED_TEXT"]
+                    schema=["FILE_NAME", "PAGE_NUMBER", "EXTRACTED_TEXT", "METADATA"]
                 )
                 df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{TEXT_TABLE}")
         else:
             # Save as single page if no page markers
             df = session.create_dataframe(
-                [(file_name, 1, text)],
-                schema=["FILE_NAME", "PAGE_NUMBER", "EXTRACTED_TEXT"]
+                [(file_name, 1, text, None)],
+                schema=["FILE_NAME", "PAGE_NUMBER", "EXTRACTED_TEXT", "METADATA"]
             )
             df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{TEXT_TABLE}")
         
