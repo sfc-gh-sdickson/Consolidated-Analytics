@@ -178,29 +178,33 @@ def extract_text_from_pdf_bytes(pdf_bytes, file_name):
     except Exception as e:
         return f"Error: {str(e)}"
 
-def get_pdf_image_count_bytes(pdf_bytes, file_name):
+def extract_images_from_pdf_bytes(pdf_bytes, file_name):
     """
-    Get count of images in PDF from bytes directly in Streamlit
+    Extract images from PDF and save to Snowflake stage
     
     Args:
         pdf_bytes: PDF file as bytes
         file_name: Name of the PDF file (for reference)
         
     Returns:
-        Number of images in PDF
+        List of extracted image file names
     """
     try:
         import PyPDF2
         import io
+        import tempfile
+        import os
+        from PIL import Image
         
         # Create a BytesIO object from the bytes
         pdf_file = io.BytesIO(pdf_bytes)
         
         # Read the PDF
         reader = PyPDF2.PdfReader(pdf_file)
-        image_count = 0
+        extracted_images = []
+        image_counter = 0
         
-        for page in reader.pages:
+        for page_num, page in enumerate(reader.pages, start=1):
             # Check if page has resources
             if '/Resources' in page:
                 resources = page['/Resources']
@@ -208,17 +212,67 @@ def get_pdf_image_count_bytes(pdf_bytes, file_name):
                     xObject = resources['/XObject']
                     if hasattr(xObject, 'get_object'):
                         xObject = xObject.get_object()
+                    
                     for obj_name in xObject:
                         obj = xObject[obj_name]
                         if hasattr(obj, 'get_object'):
                             obj = obj.get_object()
+                        
                         if '/Subtype' in obj and obj['/Subtype'] == '/Image':
-                            image_count += 1
+                            image_counter += 1
+                            
+                            # Extract image data
+                            try:
+                                # Get image properties
+                                size = (obj['/Width'], obj['/Height'])
+                                data = obj.get_data()
+                                
+                                # Determine image format
+                                if '/Filter' in obj:
+                                    filter_type = obj['/Filter']
+                                    if filter_type == '/DCTDecode':
+                                        ext = 'jpg'
+                                    elif filter_type == '/FlateDecode':
+                                        ext = 'png'
+                                    elif filter_type == '/JPXDecode':
+                                        ext = 'jp2'
+                                    else:
+                                        ext = 'png'  # default
+                                else:
+                                    ext = 'png'
+                                
+                                # Create image file name
+                                base_name = file_name.rsplit('.', 1)[0]
+                                image_name = f"{base_name}_page{page_num}_img{image_counter}.{ext}"
+                                
+                                # Save to temporary file
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{ext}') as tmp_file:
+                                    tmp_file.write(data)
+                                    tmp_path = tmp_file.name
+                                
+                                try:
+                                    # Upload to Snowflake stage
+                                    stage_path = f"@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}"
+                                    session.file.put(
+                                        tmp_path,
+                                        stage_path,
+                                        auto_compress=False,
+                                        overwrite=True
+                                    )
+                                    extracted_images.append(image_name)
+                                finally:
+                                    # Clean up temp file
+                                    if os.path.exists(tmp_path):
+                                        os.unlink(tmp_path)
+                                        
+                            except Exception as img_error:
+                                st.warning(f"Could not extract image {image_counter} from page {page_num}: {str(img_error)}")
+                                continue
         
-        return image_count
+        return extracted_images
     except Exception as e:
-        st.error(f"Error getting image count: {str(e)}")
-        return 0
+        st.error(f"Error extracting images: {str(e)}")
+        return []
 
 def save_text_to_table(file_name, text):
     """
@@ -378,6 +432,100 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         st.error(f"Traceback: {traceback.format_exc()}")
         return None
 
+def analyze_images_with_cortex(file_name, image_files, model_name):
+    """
+    Analyze extracted images using Snowflake Cortex AI vision models
+    
+    Args:
+        file_name: Name of the PDF file
+        image_files: List of extracted image file names
+        model_name: Cortex model identifier
+        
+    Returns:
+        List of analysis results for each image
+    """
+    all_results = []
+    
+    try:
+        from snowflake.snowpark.functions import col, lit, call_function
+        
+        for img_idx, image_name in enumerate(image_files, start=1):
+            st.write(f"Analyzing image {img_idx}/{len(image_files)}: {image_name}")
+            
+            try:
+                # Build scoped URL for the image
+                image_url_query = f"""
+                    SELECT BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}, '{image_name}') AS IMAGE_URL
+                """
+                url_result = session.sql(image_url_query).collect()
+                
+                if not url_result:
+                    st.warning(f"Could not get URL for {image_name}")
+                    continue
+                    
+                image_url = url_result[0]['IMAGE_URL']
+                
+                # Call Cortex Complete with vision model
+                prompt = ANALYSIS_PROMPT
+                
+                # Try using SQL approach for image analysis
+                prompt_escaped = prompt.replace("'", "''").replace("\\", "\\\\")
+                model_escaped = model_name.replace("'", "''")
+                
+                # Note: Image analysis with Cortex requires vision-capable models
+                response_result = session.sql(f"""
+                    SELECT SNOWFLAKE.CORTEX.COMPLETE(
+                        '{model_escaped}',
+                        ARRAY_CONSTRUCT(
+                            OBJECT_CONSTRUCT('type', 'text', 'text', '{prompt_escaped}'),
+                            OBJECT_CONSTRUCT('type', 'image_url', 'image_url', OBJECT_CONSTRUCT('url', '{image_url}'))
+                        )
+                    ) AS RESPONSE
+                """).collect()
+                
+                response = response_result[0]['RESPONSE'] if response_result else ""
+                
+                # Parse response
+                try:
+                    if '{' in response:
+                        json_start = response.index('{')
+                        json_end = response.rindex('}') + 1
+                        json_str = response[json_start:json_end]
+                        analysis_json = json.loads(json_str)
+                    else:
+                        analysis_json = {
+                            "for_sale_sign": {"detected": False, "confidence": 0, "description": "Could not parse"},
+                            "solar_panels": {"detected": False, "confidence": 0, "description": "Could not parse"},
+                            "human_presence": {"detected": False, "confidence": 0, "description": "Could not parse"},
+                            "potential_damage": {"detected": False, "confidence": 0, "description": "Could not parse"}
+                        }
+                except Exception as parse_error:
+                    st.warning(f"Could not parse response for {image_name}: {str(parse_error)}")
+                    analysis_json = {
+                        "for_sale_sign": {"detected": False, "confidence": 0, "description": response[:200]},
+                        "solar_panels": {"detected": False, "confidence": 0, "description": ""},
+                        "human_presence": {"detected": False, "confidence": 0, "description": ""},
+                        "potential_damage": {"detected": False, "confidence": 0, "description": ""}
+                    }
+                
+                # Save results
+                save_analysis_results(file_name, image_name, model_name, img_idx, analysis_json, response)
+                all_results.append(analysis_json)
+                
+            except Exception as img_error:
+                st.error(f"Error analyzing {image_name}: {str(img_error)}")
+                import traceback
+                st.error(f"Traceback: {traceback.format_exc()}")
+                continue
+        
+        return all_results
+        
+    except Exception as e:
+        st.error(f"Error in image analysis: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
+        return []
+
 def save_analysis_results(file_name, image_name, model_name, page_number, analysis_json, full_text):
     """
     Save analysis results to Snowflake table
@@ -508,51 +656,76 @@ with tab1:
                         st.error(f"Failed to extract text: {text}")
         
         with col2:
-            if st.button("🖼️ Get Image Info", use_container_width=True):
-                with st.spinner("Counting images..."):
-                    count = get_pdf_image_count_bytes(pdf_bytes, uploaded_file.name)
-                    st.info(f"Found **{count}** images in PDF")
+            if st.button("🖼️ Extract Images", use_container_width=True):
+                with st.spinner("Extracting images from PDF..."):
+                    extracted_images = extract_images_from_pdf_bytes(pdf_bytes, uploaded_file.name)
                     
-                    if count > 0:
-                        st.warning("Note: Image extraction requires manual processing. Use Cortex AI to analyze PDF content.")
+                    if extracted_images:
+                        st.success(f"✅ Extracted **{len(extracted_images)}** images!")
+                        st.session_state['extracted_images'] = extracted_images
+                        
+                        with st.expander("Extracted Image Files"):
+                            for img_name in extracted_images:
+                                st.text(f"• {img_name}")
+                    else:
+                        st.warning("No images found or could not extract images from PDF")
         
-        # Analyze button
+        # Analyze buttons
         st.divider()
-        st.subheader("🤖 Analyze PDF with Cortex AI")
+        st.subheader("🤖 Analyze with Cortex AI")
         
-        if st.button("▶️ Run Analysis", type="primary", use_container_width=True):
-            with st.spinner(f"Analyzing with {selected_model_name}..."):
-                results = analyze_pdf_with_cortex(
-                    uploaded_file.name,
-                    selected_model,
-                    PDF_STAGE
-                )
-                
-                if results:
-                    st.success("✅ Analysis complete!")
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            if st.button("📝 Analyze Text Content", use_container_width=True):
+                with st.spinner(f"Analyzing text with {selected_model_name}..."):
+                    results = analyze_pdf_with_cortex(
+                        uploaded_file.name,
+                        selected_model,
+                        PDF_STAGE
+                    )
                     
-                    # Show results
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        for_sale = results.get("for_sale_sign", {})
-                        if for_sale.get("detected"):
-                            st.metric("🏠 For Sale Sign", "YES", f"{for_sale.get('confidence', 0)}%")
-                    
-                    with col2:
-                        solar = results.get("solar_panels", {})
-                        if solar.get("detected"):
-                            st.metric("☀️ Solar Panels", "YES", f"{solar.get('confidence', 0)}%")
-                    
-                    with col3:
-                        human = results.get("human_presence", {})
-                        if human.get("detected"):
-                            st.metric("👥 Human Presence", "YES", f"{human.get('confidence', 0)}%")
-                    
-                    with col4:
-                        damage = results.get("potential_damage", {})
-                        if damage.get("detected"):
-                            st.metric("⚠️ Potential Damage", "YES", f"{damage.get('confidence', 0)}%")
+                    if results:
+                        st.success("✅ Text analysis complete!")
+                        
+                        # Show results
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            for_sale = results.get("for_sale_sign", {})
+                            if for_sale.get("detected"):
+                                st.metric("🏠 For Sale Sign", "YES", f"{for_sale.get('confidence', 0)}%")
+                        
+                        with col2:
+                            solar = results.get("solar_panels", {})
+                            if solar.get("detected"):
+                                st.metric("☀️ Solar Panels", "YES", f"{solar.get('confidence', 0)}%")
+                        
+                        with col3:
+                            human = results.get("human_presence", {})
+                            if human.get("detected"):
+                                st.metric("👥 Human Presence", "YES", f"{human.get('confidence', 0)}%")
+                        
+                        with col4:
+                            damage = results.get("potential_damage", {})
+                            if damage.get("detected"):
+                                st.metric("⚠️ Potential Damage", "YES", f"{damage.get('confidence', 0)}%")
+        
+        with col_b:
+            if st.button("🖼️ Analyze Images", use_container_width=True, type="primary"):
+                if 'extracted_images' in st.session_state and st.session_state['extracted_images']:
+                    with st.spinner(f"Analyzing {len(st.session_state['extracted_images'])} images with {selected_model_name}..."):
+                        results = analyze_images_with_cortex(
+                            uploaded_file.name,
+                            st.session_state['extracted_images'],
+                            selected_model
+                        )
+                        
+                        if results:
+                            st.success(f"✅ Analyzed {len(results)} images!")
+                            st.info("View detailed results in the 'Analysis Results' tab")
+                else:
+                    st.warning("⚠️ Please extract images first before analyzing them!")
 
 # ================================================================
 # TAB 2: VIEW RESULTS
