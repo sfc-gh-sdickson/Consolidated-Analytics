@@ -301,20 +301,27 @@ def save_text_to_table(file_name, text):
                     except (ValueError, IndexError):
                         continue
             
-            # Insert all rows using DataFrame API (safer than string concatenation)
+            # Insert all rows using SQL INSERT with explicit column names
             if rows_to_insert:
-                df = session.create_dataframe(
-                    rows_to_insert,
-                    schema=["FILE_NAME", "PAGE_NUMBER", "EXTRACTED_TEXT", "METADATA"]
-                )
-                df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{TEXT_TABLE}")
+                for file_name, page_num, page_text, metadata in rows_to_insert:
+                    # Escape single quotes in text
+                    page_text_escaped = page_text.replace("'", "''")
+                    
+                    query = f"""
+                    INSERT INTO {DATABASE}.{SCHEMA}.{TEXT_TABLE} 
+                    (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT, METADATA)
+                    VALUES ('{file_name}', {page_num}, '{page_text_escaped}', NULL)
+                    """
+                    session.sql(query).collect()
         else:
             # Save as single page if no page markers
-            df = session.create_dataframe(
-                [(file_name, 1, text, None)],
-                schema=["FILE_NAME", "PAGE_NUMBER", "EXTRACTED_TEXT", "METADATA"]
-            )
-            df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{TEXT_TABLE}")
+            text_escaped = text.replace("'", "''")
+            query = f"""
+            INSERT INTO {DATABASE}.{SCHEMA}.{TEXT_TABLE} 
+            (FILE_NAME, PAGE_NUMBER, EXTRACTED_TEXT, METADATA)
+            VALUES ('{file_name}', 1, '{text_escaped}', NULL)
+            """
+            session.sql(query).collect()
         
         return True
     except Exception as e:
