@@ -460,31 +460,18 @@ def analyze_images_with_cortex(file_name, image_files, model_name):
             st.write(f"Analyzing image {img_idx}/{len(image_files)}: {image_name}")
             
             try:
-                # Get scoped file URL for the image
-                image_url_query = f"""
-                    SELECT BUILD_SCOPED_FILE_URL(@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}, '{image_name}') AS IMAGE_URL
-                """
-                url_result = session.sql(image_url_query).collect()
-                
-                if not url_result:
-                    st.warning(f"Could not get URL for {image_name}")
-                    continue
-                    
-                image_url = url_result[0]['IMAGE_URL']
-                
                 # For multimodal COMPLETE with images from stage
-                # COMPLETE requires string LITERALS, so we pass the URL as a literal
+                # Use TO_FILE() with stage path and filename
                 prompt = ANALYSIS_PROMPT
                 prompt_escaped = prompt.replace("'", "''")
                 model_escaped = model_name.replace("'", "''")
-                image_url_escaped = image_url.replace("'", "''")
                 
-                # Call COMPLETE with model, prompt, and scoped file URL (all as string literals)
+                # Call COMPLETE with model, prompt, and TO_FILE for image
                 response_result = session.sql(f"""
                     SELECT SNOWFLAKE.CORTEX.COMPLETE(
                         '{model_escaped}',
                         '{prompt_escaped}',
-                        '{image_url_escaped}'
+                        TO_FILE('@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}', '{image_name}')
                     ) AS RESPONSE
                 """).collect()
                 
