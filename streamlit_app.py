@@ -40,7 +40,7 @@ PDF_STAGE = "PDF_FILES_STAGE"
 # Available Cortex AI Models
 AVAILABLE_MODELS = {
     "Claude (Anthropic)": "claude-3-5-sonnet",
-    "GPT-4 (OpenAI)": "gpt-4o",
+    "GPT-5 (OpenAI)": "openai-gpt-5",
     "Pixtral Large (Mistral)": "pixtral-large"
 }
 
@@ -59,6 +59,11 @@ def build_analysis_prompt(categories):
         category_text += f"{idx}. **{cat['name']}**: {cat['description']}\n"
     
     json_structure = "{\n"
+    json_structure += '    "is_property_image": {\n'
+    json_structure += '        "detected": true/false,\n'
+    json_structure += '        "confidence": 0-100,\n'
+    json_structure += '        "description": "..."\n'
+    json_structure += '    },\n'
     for cat in categories:
         json_structure += f'    "{cat["id"]}": {{\n'
         json_structure += '        "detected": true/false,\n'
@@ -68,9 +73,20 @@ def build_analysis_prompt(categories):
     json_structure = json_structure.rstrip(',\n') + '\n}'
     
     prompt = f"""
-Analyze this property image or PDF page and provide a detailed assessment for the following categories:
+IMPORTANT: First determine if this is an actual house or property image. 
+- DO NOT analyze logos, company logos, brand marks, maps, diagrams, charts, or non-property images.
+- ONLY analyze if this is a photograph or rendering of an actual residential or commercial property/building.
+
+If this is NOT a property image (e.g., it's a logo, map, diagram, or text page), return:
+{{
+    "is_property_image": {{"detected": false, "confidence": 95, "description": "This is a [logo/map/diagram/etc], not a property image"}},
+    ... (set all other categories to false with 0 confidence)
+}}
+
+If this IS a property or house image, analyze it for the following categories:
 
 {category_text}
+
 For each category, provide:
 - A YES/NO answer
 - Confidence level (0-100%)
@@ -551,8 +567,10 @@ def analyze_images_with_cortex(file_name, image_files, model_name, categories, b
 def save_analysis_results(file_name, image_name, model_name, page_number, analysis_json, full_text):
     """
     Save analysis results to Snowflake table
+    Stores all categories (including custom ones) in METADATA field
     """
     try:
+        # Get default categories for backward compatibility
         for_sale = analysis_json.get("for_sale_sign", {})
         solar = analysis_json.get("solar_panels", {})
         human = analysis_json.get("human_presence", {})
@@ -565,7 +583,13 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         damage_desc_escaped = damage.get('description', '').replace("'", "''")
         full_text_escaped = full_text[:500].replace("'", "''")
         
+        # Convert full analysis JSON to string for METADATA (stores ALL categories including custom)
+        metadata_json = json.dumps(analysis_json)
+        metadata_escaped = metadata_json.replace("'", "''")
+        
         # Use explicit INSERT with column names
+        # Store default categories in specific columns for easy querying
+        # Store COMPLETE analysis (including custom categories) in METADATA
         query = f"""
         INSERT INTO {DATABASE}.{SCHEMA}.{ANALYSIS_TABLE} (
             FILE_NAME, IMAGE_NAME, MODEL_NAME, PAGE_NUMBER,
@@ -581,7 +605,7 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
             {str(solar.get('detected', False)).upper()}, {float(solar.get('confidence', 0))},
             {str(human.get('detected', False)).upper()}, {float(human.get('confidence', 0))},
             {str(damage.get('detected', False)).upper()}, {float(damage.get('confidence', 0))},
-            '{damage_desc_escaped}', '{full_text_escaped}', NULL
+            '{damage_desc_escaped}', '{full_text_escaped}', PARSE_JSON('{metadata_escaped}')
         )
         """
         
@@ -831,7 +855,7 @@ with tab2:
 with tab3:
     st.header("🔍 Analysis Results")
     
-    # Query analysis data
+    # Query analysis data including METADATA for custom categories
     try:
         analysis_df = session.sql(f"""
             SELECT 
@@ -848,7 +872,8 @@ with tab3:
                 POTENTIAL_DAMAGE_DETECTED,
                 POTENTIAL_DAMAGE_CONFIDENCE,
                 DAMAGE_DESCRIPTION,
-                ANALYSIS_TIMESTAMP
+                ANALYSIS_TIMESTAMP,
+                METADATA
             FROM {DATABASE}.{SCHEMA}.{ANALYSIS_TABLE}
             ORDER BY ANALYSIS_TIMESTAMP DESC
         """).to_pandas()
@@ -905,36 +930,78 @@ with tab3:
                         st.markdown(f"**Model:** {row['MODEL_NAME']}")
                         st.markdown(f"**Analysis Time:** {row['ANALYSIS_TIMESTAMP']}")
                         
-                        # Display detection results
+                        # Display detection results - use METADATA if available (contains all categories)
                         st.markdown("#### Detection Results:")
                         
-                        result_cols = st.columns(4)
-                        with result_cols[0]:
-                            if row['FOR_SALE_SIGN_DETECTED']:
-                                st.success(f"🏠 For Sale: YES ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
-                            else:
-                                st.info(f"🏠 For Sale: NO ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
+                        # Try to parse METADATA for all categories (including custom)
+                        all_categories = {}
+                        if pd.notna(row['METADATA']) and row['METADATA']:
+                            try:
+                                if isinstance(row['METADATA'], str):
+                                    all_categories = json.loads(row['METADATA'])
+                                elif isinstance(row['METADATA'], dict):
+                                    all_categories = row['METADATA']
+                            except:
+                                pass
                         
-                        with result_cols[1]:
-                            if row['SOLAR_PANEL_DETECTED']:
-                                st.success(f"☀️ Solar: YES ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
-                            else:
-                                st.info(f"☀️ Solar: NO ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
-                        
-                        with result_cols[2]:
-                            if row['HUMAN_PRESENCE_DETECTED']:
-                                st.success(f"👥 Human: YES ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
-                            else:
-                                st.info(f"👥 Human: NO ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
-                        
-                        with result_cols[3]:
-                            if row['POTENTIAL_DAMAGE_DETECTED']:
-                                st.warning(f"⚠️ Damage: YES ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
-                            else:
-                                st.info(f"⚠️ Damage: NO ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
-                        
-                        if row['DAMAGE_DESCRIPTION']:
-                            st.markdown(f"**Damage Description:** {row['DAMAGE_DESCRIPTION']}")
+                        # Display all categories from METADATA
+                        if all_categories:
+                            # Check if it's a property image first
+                            is_property = all_categories.get('is_property_image', {})
+                            if is_property and not is_property.get('detected', True):
+                                st.warning(f"⚠️ Not a property image: {is_property.get('description', 'N/A')}")
+                            
+                            # Display all other categories dynamically
+                            category_items = [(k, v) for k, v in all_categories.items() if k != 'is_property_image']
+                            
+                            # Display in rows of 4
+                            for i in range(0, len(category_items), 4):
+                                result_cols = st.columns(min(4, len(category_items) - i))
+                                for col_idx, (cat_id, cat_data) in enumerate(category_items[i:i+4]):
+                                    with result_cols[col_idx]:
+                                        detected = cat_data.get('detected', False)
+                                        confidence = cat_data.get('confidence', 0)
+                                        # Format category name nicely
+                                        cat_name = cat_id.replace('_', ' ').title()
+                                        
+                                        if detected:
+                                            st.success(f"✓ {cat_name}: YES ({confidence:.0f}%)")
+                                        else:
+                                            st.info(f"✗ {cat_name}: NO ({confidence:.0f}%)")
+                                        
+                                        # Show description if available
+                                        desc = cat_data.get('description', '')
+                                        if desc and len(desc) > 0:
+                                            st.caption(desc[:100])
+                        else:
+                            # Fallback to default columns if METADATA not available
+                            result_cols = st.columns(4)
+                            with result_cols[0]:
+                                if row['FOR_SALE_SIGN_DETECTED']:
+                                    st.success(f"🏠 For Sale: YES ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
+                                else:
+                                    st.info(f"🏠 For Sale: NO ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
+                            
+                            with result_cols[1]:
+                                if row['SOLAR_PANEL_DETECTED']:
+                                    st.success(f"☀️ Solar: YES ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
+                                else:
+                                    st.info(f"☀️ Solar: NO ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
+                            
+                            with result_cols[2]:
+                                if row['HUMAN_PRESENCE_DETECTED']:
+                                    st.success(f"👥 Human: YES ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
+                                else:
+                                    st.info(f"👥 Human: NO ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
+                            
+                            with result_cols[3]:
+                                if row['POTENTIAL_DAMAGE_DETECTED']:
+                                    st.warning(f"⚠️ Damage: YES ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
+                                else:
+                                    st.info(f"⚠️ Damage: NO ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
+                            
+                            if row['DAMAGE_DESCRIPTION']:
+                                st.markdown(f"**Damage Description:** {row['DAMAGE_DESCRIPTION']}")
             
             st.divider()
             
