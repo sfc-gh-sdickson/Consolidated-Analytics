@@ -241,10 +241,6 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                 else:
                                     ext = 'png'
                                 
-                                # Create image file name
-                                base_name = file_name.rsplit('.', 1)[0]
-                                image_name = f"{base_name}_page{page_num}_img{image_counter}.{ext}"
-                                
                                 # Save to temporary file
                                 with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{ext}') as tmp_file:
                                     tmp_file.write(data)
@@ -253,13 +249,19 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                 try:
                                     # Upload to Snowflake stage
                                     stage_path = f"@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}"
-                                    session.file.put(
+                                    put_result = session.file.put(
                                         tmp_path,
                                         stage_path,
                                         auto_compress=False,
                                         overwrite=True
                                     )
-                                    extracted_images.append(image_name)
+                                    
+                                    # Get the actual uploaded filename from PUT result
+                                    if put_result and len(put_result) > 0:
+                                        uploaded_filename = put_result[0].target
+                                        # Extract just the filename without path
+                                        actual_image_name = uploaded_filename.split('/')[-1]
+                                        extracted_images.append(actual_image_name)
                                 finally:
                                     # Clean up temp file
                                     if os.path.exists(tmp_path):
