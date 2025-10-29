@@ -267,6 +267,11 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                 try:
                                     # Upload to Snowflake stage
                                     stage_path = f"@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}"
+                                    
+                                    # Create a meaningful filename
+                                    base_name = file_name.replace('.pdf', '').replace(' ', '_')
+                                    image_filename = f"{base_name}_page{page_num}_img{image_counter}.{ext}"
+                                    
                                     put_result = session.file.put(
                                         tmp_path,
                                         stage_path,
@@ -280,6 +285,9 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                         # Extract just the filename without path
                                         actual_image_name = uploaded_filename.split('/')[-1]
                                         extracted_images.append(actual_image_name)
+                                        st.info(f"✅ Uploaded image {image_counter}: {actual_image_name}")
+                                    else:
+                                        st.warning(f"⚠️ Could not confirm upload for image {image_counter}")
                                 finally:
                                     # Clean up temp file
                                     if os.path.exists(tmp_path):
@@ -289,9 +297,17 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                 st.warning(f"Could not extract image {image_counter} from page {page_num}: {str(img_error)}")
                                 continue
         
+        # Summary
+        if extracted_images:
+            st.success(f"📊 Extraction Summary: {len(extracted_images)} images extracted from {len(reader.pages)} pages")
+        else:
+            st.warning(f"⚠️ No images found in PDF ({len(reader.pages)} pages scanned)")
+        
         return extracted_images
     except Exception as e:
         st.error(f"Error extracting images: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return []
 
 def save_text_to_table(file_name, text):
@@ -589,7 +605,7 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         
         # Use explicit INSERT with column names
         # Store default categories in specific columns for easy querying
-        # Store COMPLETE analysis (including custom categories) in METADATA
+        # Store COMPLETE analysis (including custom categories) in METADATA using PARSE_JSON()
         query = f"""
         INSERT INTO {DATABASE}.{SCHEMA}.{ANALYSIS_TABLE} (
             FILE_NAME, IMAGE_NAME, MODEL_NAME, PAGE_NUMBER,
@@ -605,7 +621,7 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
             {str(solar.get('detected', False)).upper()}, {float(solar.get('confidence', 0))},
             {str(human.get('detected', False)).upper()}, {float(human.get('confidence', 0))},
             {str(damage.get('detected', False)).upper()}, {float(damage.get('confidence', 0))},
-            '{damage_desc_escaped}', '{full_text_escaped}', '{metadata_escaped}'
+            '{damage_desc_escaped}', '{full_text_escaped}', PARSE_JSON('{metadata_escaped}')
         )
         """
         
