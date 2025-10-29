@@ -44,46 +44,44 @@ AVAILABLE_MODELS = {
     "Pixtral Large (Mistral)": "pixtral-large"
 }
 
-# Analysis Prompt Template
-ANALYSIS_PROMPT = """
+# Default Analysis Categories
+DEFAULT_CATEGORIES = [
+    {"id": "for_sale_sign", "name": "For Sale Sign", "description": "Is there a 'For Sale' sign visible?"},
+    {"id": "solar_panels", "name": "Solar Panels", "description": "Are there solar panels installed on the property?"},
+    {"id": "human_presence", "name": "Human Presence", "description": "Are there any people visible?"},
+    {"id": "potential_damage", "name": "Potential Damage", "description": "Is there any visible damage to the property (roof damage, broken windows, structural issues, etc.)?"}
+]
+
+def build_analysis_prompt(categories):
+    """Build analysis prompt dynamically based on selected categories"""
+    category_text = ""
+    for idx, cat in enumerate(categories, 1):
+        category_text += f"{idx}. **{cat['name']}**: {cat['description']}\n"
+    
+    json_structure = "{\n"
+    for cat in categories:
+        json_structure += f'    "{cat["id"]}": {{\n'
+        json_structure += '        "detected": true/false,\n'
+        json_structure += '        "confidence": 0-100,\n'
+        json_structure += '        "description": "..."\n'
+        json_structure += '    },\n'
+    json_structure = json_structure.rstrip(',\n') + '\n}'
+    
+    prompt = f"""
 Analyze this property image or PDF page and provide a detailed assessment for the following categories:
 
-1. **For Sale Sign**: Is there a "For Sale" sign visible?
-2. **Solar Panels**: Are there solar panels installed on the property?
-3. **Human Presence**: Are there any people visible?
-4. **Potential Damage**: Is there any visible damage to the property (roof damage, broken windows, structural issues, etc.)?
-
+{category_text}
 For each category, provide:
 - A YES/NO answer
 - Confidence level (0-100%)
 - Brief description of what you observed
 
 Format your response as JSON with this structure:
-{{
-    "for_sale_sign": {{
-        "detected": true/false,
-        "confidence": 0-100,
-        "description": "..."
-    }},
-    "solar_panels": {{
-        "detected": true/false,
-        "confidence": 0-100,
-        "description": "..."
-    }},
-    "human_presence": {{
-        "detected": true/false,
-        "confidence": 0-100,
-        "description": "..."
-    }},
-    "potential_damage": {{
-        "detected": true/false,
-        "confidence": 0-100,
-        "description": "..."
-    }}
-}}
+{json_structure}
 
 If this is a text page from a PDF, analyze the text content for mentions of these categories.
 """
+    return prompt
 
 # ================================================================
 # SESSION INITIALIZATION
@@ -98,6 +96,10 @@ session = get_snowflake_session()
 
 # Set context - use fully qualified names instead of USE statements
 # USE DATABASE/SCHEMA not supported in SiS, so we'll use fully qualified table names throughout
+
+# Initialize session state for categories
+if 'analysis_categories' not in st.session_state:
+    st.session_state['analysis_categories'] = DEFAULT_CATEGORIES.copy()
 
 # ================================================================
 # HELPER FUNCTIONS
@@ -330,7 +332,7 @@ def save_text_to_table(file_name, text):
         st.error(f"Error saving text: {str(e)}")
         return False
 
-def analyze_pdf_with_cortex(file_name, model_name, stage_name):
+def analyze_pdf_with_cortex(file_name, model_name, stage_name, categories):
     """
     Analyze PDF content using Snowflake Cortex AI
     
@@ -338,6 +340,7 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         file_name: Name of the PDF file
         model_name: Cortex model identifier
         stage_name: Stage where PDF is located
+        categories: List of analysis categories
         
     Returns:
         Analysis results dictionary
@@ -361,8 +364,9 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         # Combine text from multiple pages
         combined_text = " ".join([row['EXTRACTED_TEXT'][:1000] for row in text_result])
         
-        # Create prompt
-        prompt = f"{ANALYSIS_PROMPT}\n\nContent to analyze:\n{combined_text}"
+        # Create prompt with dynamic categories
+        analysis_prompt = build_analysis_prompt(categories)
+        prompt = f"{analysis_prompt}\n\nContent to analyze:\n{combined_text}"
         
         # Truncate prompt if too long (Cortex has token limits)
         if len(prompt) > 10000:
@@ -414,21 +418,15 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
                 json_str = response[json_start:json_end]
                 analysis_json = json.loads(json_str)
             else:
-                # Create default response
-                analysis_json = {
-                    "for_sale_sign": {"detected": False, "confidence": 0, "description": "Could not parse"},
-                    "solar_panels": {"detected": False, "confidence": 0, "description": "Could not parse"},
-                    "human_presence": {"detected": False, "confidence": 0, "description": "Could not parse"},
-                    "potential_damage": {"detected": False, "confidence": 0, "description": "Could not parse"}
-                }
+                # Create default response with all categories
+                analysis_json = {}
+                for cat in categories:
+                    analysis_json[cat['id']] = {"detected": False, "confidence": 0, "description": "Could not parse"}
         except Exception as parse_error:
             st.warning(f"Could not parse JSON response: {str(parse_error)}")
-            analysis_json = {
-                "for_sale_sign": {"detected": False, "confidence": 0, "description": response[:200]},
-                "solar_panels": {"detected": False, "confidence": 0, "description": ""},
-                "human_presence": {"detected": False, "confidence": 0, "description": ""},
-                "potential_damage": {"detected": False, "confidence": 0, "description": ""}
-            }
+            analysis_json = {}
+            for cat in categories:
+                analysis_json[cat['id']] = {"detected": False, "confidence": 0, "description": response[:200] if cat == categories[0] else ""}
         
         # Save results
         save_analysis_results(file_name, file_name, model_name, 1, analysis_json, response)
@@ -441,14 +439,16 @@ def analyze_pdf_with_cortex(file_name, model_name, stage_name):
         st.error(f"Traceback: {traceback.format_exc()}")
         return None
 
-def analyze_images_with_cortex(file_name, image_files, model_name):
+def analyze_images_with_cortex(file_name, image_files, model_name, categories, batch_size=5):
     """
-    Analyze extracted images using Snowflake Cortex AI vision models
+    Analyze extracted images using Snowflake Cortex AI vision models (batch processing)
     
     Args:
         file_name: Name of the PDF file
         image_files: List of extracted image file names
         model_name: Cortex model identifier
+        categories: List of analysis categories
+        batch_size: Number of images to process in parallel (default: 5)
         
     Returns:
         List of analysis results for each image
@@ -457,17 +457,23 @@ def analyze_images_with_cortex(file_name, image_files, model_name):
     
     try:
         from snowflake.snowpark.functions import col, lit, call_function
+        import concurrent.futures
+        from threading import Lock
         
-        for img_idx, image_name in enumerate(image_files, start=1):
-            st.write(f"Analyzing image {img_idx}/{len(image_files)}: {image_name}")
-            
+        # Create progress tracking
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        results_lock = Lock()
+        
+        # Build prompt with dynamic categories
+        analysis_prompt = build_analysis_prompt(categories)
+        prompt_escaped = analysis_prompt.replace("'", "''")
+        model_escaped = model_name.replace("'", "''")
+        
+        def analyze_single_image(img_data):
+            """Analyze a single image"""
+            img_idx, image_name = img_data
             try:
-                # For multimodal COMPLETE with images from stage
-                # Use TO_FILE() with stage path and filename
-                prompt = ANALYSIS_PROMPT
-                prompt_escaped = prompt.replace("'", "''")
-                model_escaped = model_name.replace("'", "''")
-                
                 # Call COMPLETE with model, prompt, and TO_FILE for image
                 response_result = session.sql(f"""
                     SELECT SNOWFLAKE.CORTEX.COMPLETE(
@@ -487,30 +493,52 @@ def analyze_images_with_cortex(file_name, image_files, model_name):
                         json_str = response[json_start:json_end]
                         analysis_json = json.loads(json_str)
                     else:
-                        analysis_json = {
-                            "for_sale_sign": {"detected": False, "confidence": 0, "description": "Could not parse"},
-                            "solar_panels": {"detected": False, "confidence": 0, "description": "Could not parse"},
-                            "human_presence": {"detected": False, "confidence": 0, "description": "Could not parse"},
-                            "potential_damage": {"detected": False, "confidence": 0, "description": "Could not parse"}
-                        }
+                        analysis_json = {}
+                        for cat in categories:
+                            analysis_json[cat['id']] = {"detected": False, "confidence": 0, "description": "Could not parse"}
                 except Exception as parse_error:
-                    st.warning(f"Could not parse response for {image_name}: {str(parse_error)}")
-                    analysis_json = {
-                        "for_sale_sign": {"detected": False, "confidence": 0, "description": response[:200]},
-                        "solar_panels": {"detected": False, "confidence": 0, "description": ""},
-                        "human_presence": {"detected": False, "confidence": 0, "description": ""},
-                        "potential_damage": {"detected": False, "confidence": 0, "description": ""}
-                    }
+                    analysis_json = {}
+                    for cat in categories:
+                        analysis_json[cat['id']] = {"detected": False, "confidence": 0, "description": response[:200] if cat == categories[0] else ""}
                 
                 # Save results
                 save_analysis_results(file_name, image_name, model_name, img_idx, analysis_json, response)
-                all_results.append(analysis_json)
+                
+                return (img_idx, image_name, analysis_json, None)
                 
             except Exception as img_error:
-                st.error(f"Error analyzing {image_name}: {str(img_error)}")
                 import traceback
-                st.error(f"Traceback: {traceback.format_exc()}")
-                continue
+                return (img_idx, image_name, None, f"{str(img_error)}\n{traceback.format_exc()}")
+        
+        # Process images in batches
+        total_images = len(image_files)
+        completed = 0
+        
+        # Create list of (index, image_name) tuples
+        image_data = [(idx + 1, img) for idx, img in enumerate(image_files)]
+        
+        # Process in batches using ThreadPoolExecutor
+        for batch_start in range(0, total_images, batch_size):
+            batch_end = min(batch_start + batch_size, total_images)
+            batch = image_data[batch_start:batch_end]
+            
+            status_text.text(f"Processing batch {batch_start//batch_size + 1} ({batch_start + 1}-{batch_end} of {total_images} images)...")
+            
+            # Process batch in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+                batch_results = list(executor.map(analyze_single_image, batch))
+            
+            # Collect results
+            for img_idx, image_name, analysis_json, error in batch_results:
+                if error:
+                    st.warning(f"⚠️ Error analyzing {image_name}: {error}")
+                else:
+                    all_results.append((img_idx, image_name, analysis_json))
+                
+                completed += 1
+                progress_bar.progress(completed / total_images)
+        
+        status_text.text(f"✅ Completed analysis of {len(all_results)} images!")
         
         return all_results
         
@@ -598,12 +626,39 @@ with st.sidebar:
     selected_model = AVAILABLE_MODELS[selected_model_name]
     
     st.subheader("Analysis Categories")
-    st.markdown("""
-    - 🏠 For Sale Signs
-    - ☀️ Solar Panels
-    - 👥 Human Presence
-    - ⚠️ Potential Damage
-    """)
+    
+    # Display current categories
+    for cat in st.session_state['analysis_categories']:
+        st.markdown(f"- **{cat['name']}**: {cat['description']}")
+    
+    # Add new category form
+    with st.expander("➕ Add Custom Category"):
+        with st.form("add_category_form"):
+            new_cat_name = st.text_input("Category Name", placeholder="e.g., Pool Detected")
+            new_cat_desc = st.text_area("Category Description", placeholder="e.g., Is there a swimming pool visible?")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.form_submit_button("Add Category", use_container_width=True):
+                    if new_cat_name and new_cat_desc:
+                        # Generate ID from name
+                        cat_id = new_cat_name.lower().replace(" ", "_").replace("-", "_")
+                        new_category = {
+                            "id": cat_id,
+                            "name": new_cat_name,
+                            "description": new_cat_desc
+                        }
+                        st.session_state['analysis_categories'].append(new_category)
+                        st.success(f"✅ Added category: {new_cat_name}")
+                        st.rerun()
+                    else:
+                        st.error("Please fill in both name and description")
+            
+            with col2:
+                if st.form_submit_button("Reset to Defaults", use_container_width=True):
+                    st.session_state['analysis_categories'] = DEFAULT_CATEGORIES.copy()
+                    st.success("✅ Reset to default categories")
+                    st.rerun()
 
 # Main Content Area
 tab1, tab2, tab3 = st.tabs(["📤 Upload & Process", "📊 View Results", "🔍 Analysis Results"])
@@ -675,43 +730,37 @@ with tab1:
                     results = analyze_pdf_with_cortex(
                         uploaded_file.name,
                         selected_model,
-                        PDF_STAGE
+                        PDF_STAGE,
+                        st.session_state['analysis_categories']
                     )
                     
                     if results:
                         st.success("✅ Text analysis complete!")
                         
-                        # Show results
-                        col1, col2, col3, col4 = st.columns(4)
+                        # Show results dynamically based on categories
+                        num_cols = min(len(st.session_state['analysis_categories']), 4)
+                        cols = st.columns(num_cols)
                         
-                        with col1:
-                            for_sale = results.get("for_sale_sign", {})
-                            if for_sale.get("detected"):
-                                st.metric("🏠 For Sale Sign", "YES", f"{for_sale.get('confidence', 0)}%")
-                        
-                        with col2:
-                            solar = results.get("solar_panels", {})
-                            if solar.get("detected"):
-                                st.metric("☀️ Solar Panels", "YES", f"{solar.get('confidence', 0)}%")
-                        
-                        with col3:
-                            human = results.get("human_presence", {})
-                            if human.get("detected"):
-                                st.metric("👥 Human Presence", "YES", f"{human.get('confidence', 0)}%")
-                        
-                        with col4:
-                            damage = results.get("potential_damage", {})
-                            if damage.get("detected"):
-                                st.metric("⚠️ Potential Damage", "YES", f"{damage.get('confidence', 0)}%")
+                        for idx, cat in enumerate(st.session_state['analysis_categories'][:num_cols]):
+                            with cols[idx]:
+                                cat_result = results.get(cat['id'], {})
+                                if cat_result.get("detected"):
+                                    st.metric(f"{cat['name']}", "YES", f"{cat_result.get('confidence', 0)}%")
         
         with col_b:
-            if st.button("🖼️ Analyze Images", use_container_width=True, type="primary"):
+            if st.button("🖼️ Analyze Images (Batch)", use_container_width=True, type="primary"):
                 if 'extracted_images' in st.session_state and st.session_state['extracted_images']:
+                    # Add batch size selector
+                    batch_size = st.slider("Batch Size (parallel processing)", min_value=1, max_value=10, value=5, 
+                                          help="Number of images to process simultaneously")
+                    
                     with st.spinner(f"Analyzing {len(st.session_state['extracted_images'])} images with {selected_model_name}..."):
                         results = analyze_images_with_cortex(
                             uploaded_file.name,
                             st.session_state['extracted_images'],
-                            selected_model
+                            selected_model,
+                            st.session_state['analysis_categories'],
+                            batch_size
                         )
                         
                         if results:
@@ -826,9 +875,72 @@ with tab3:
             
             st.divider()
             
-            # Detailed results
+            # Detailed results with thumbnails
             st.subheader("Detailed Analysis Results")
-            st.dataframe(analysis_df, use_container_width=True, height=400)
+            
+            # Display results in a more visual format with thumbnails
+            for idx, row in analysis_df.iterrows():
+                with st.expander(f"📄 {row['FILE_NAME']} - Image: {row['IMAGE_NAME']} (Page {row['PAGE_NUMBER']})"):
+                    col_img, col_data = st.columns([1, 3])
+                    
+                    with col_img:
+                        # Display thumbnail
+                        try:
+                            # Get image from stage using GET_PRESIGNED_URL
+                            image_url_query = f"""
+                                SELECT GET_PRESIGNED_URL(@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}, '{row['IMAGE_NAME']}', 3600) AS URL
+                            """
+                            url_result = session.sql(image_url_query).collect()
+                            
+                            if url_result and url_result[0]['URL']:
+                                image_url = url_result[0]['URL']
+                                st.image(image_url, caption=row['IMAGE_NAME'], use_container_width=True)
+                            else:
+                                st.info("🖼️ Image thumbnail not available")
+                        except Exception as img_error:
+                            st.warning(f"Could not load thumbnail: {str(img_error)}")
+                            st.info("🖼️ Image thumbnail not available")
+                    
+                    with col_data:
+                        st.markdown(f"**Model:** {row['MODEL_NAME']}")
+                        st.markdown(f"**Analysis Time:** {row['ANALYSIS_TIMESTAMP']}")
+                        
+                        # Display detection results
+                        st.markdown("#### Detection Results:")
+                        
+                        result_cols = st.columns(4)
+                        with result_cols[0]:
+                            if row['FOR_SALE_SIGN_DETECTED']:
+                                st.success(f"🏠 For Sale: YES ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
+                            else:
+                                st.info(f"🏠 For Sale: NO ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
+                        
+                        with result_cols[1]:
+                            if row['SOLAR_PANEL_DETECTED']:
+                                st.success(f"☀️ Solar: YES ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
+                            else:
+                                st.info(f"☀️ Solar: NO ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
+                        
+                        with result_cols[2]:
+                            if row['HUMAN_PRESENCE_DETECTED']:
+                                st.success(f"👥 Human: YES ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
+                            else:
+                                st.info(f"👥 Human: NO ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
+                        
+                        with result_cols[3]:
+                            if row['POTENTIAL_DAMAGE_DETECTED']:
+                                st.warning(f"⚠️ Damage: YES ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
+                            else:
+                                st.info(f"⚠️ Damage: NO ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
+                        
+                        if row['DAMAGE_DESCRIPTION']:
+                            st.markdown(f"**Damage Description:** {row['DAMAGE_DESCRIPTION']}")
+            
+            st.divider()
+            
+            # Also show tabular view
+            st.subheader("Tabular View")
+            st.dataframe(analysis_df, use_container_width=True, height=300)
             
             # Download option
             csv = analysis_df.to_csv(index=False)
