@@ -54,13 +54,16 @@ CREATE OR REPLACE TABLE IMAGE_ANALYSIS_RESULTS (
 
 -- Step 4: Create Internal Stage for Images
 -- ================================================================
+-- Must use Snowflake-managed encryption (not client-side) for TO_FILE with COMPLETE
 CREATE OR REPLACE STAGE PDF_IMAGES_STAGE
+    ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
     DIRECTORY = ( ENABLE = TRUE )
     COMMENT = 'Stage for storing extracted images from PDFs';
 
 -- Step 5: Create Internal Stage for PDF Files
 -- ================================================================
 CREATE OR REPLACE STAGE PDF_FILES_STAGE
+    ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE')
     DIRECTORY = ( ENABLE = TRUE )
     COMMENT = 'Stage for storing uploaded PDF files';
 
