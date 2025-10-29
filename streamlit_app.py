@@ -605,7 +605,7 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
             {str(solar.get('detected', False)).upper()}, {float(solar.get('confidence', 0))},
             {str(human.get('detected', False)).upper()}, {float(human.get('confidence', 0))},
             {str(damage.get('detected', False)).upper()}, {float(damage.get('confidence', 0))},
-            '{damage_desc_escaped}', '{full_text_escaped}', PARSE_JSON('{metadata_escaped}')
+            '{damage_desc_escaped}', '{full_text_escaped}', '{metadata_escaped}'
         )
         """
         
