@@ -700,6 +700,31 @@ def analyze_images_with_cortex(file_name, image_files, model_name, categories, b
         import traceback
         st.error(f"Traceback: {traceback.format_exc()}")
         return []
+    
+def read_svg(path: str) -> Optional[str]:
+    """Safely read SVG files with enhanced error handling"""
+    try:
+        svg_path = Path(path)
+        if not svg_path.exists() or not svg_path.is_file():
+            logger.warning(f"SVG file not found: {path}")
+            return None
+
+        # Additional security check for file extension
+        if svg_path.suffix.lower() != '.svg':
+            logger.warning(f"File is not an SVG: {path}")
+            return None
+
+        with open(svg_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            # Basic SVG validation
+            if not content.strip().startswith('<svg'):
+                logger.warning(f"Invalid SVG content in file: {path}")
+                return None
+            return content
+
+    except Exception as e:
+        logger.error(f"Error reading SVG file {path}: {str(e)}")
+        return None
 
 def save_analysis_results(file_name, image_name, model_name, page_number, analysis_json, full_text):
     """
@@ -781,6 +806,9 @@ All processing happens within Snowflake - no external libraries required!
 
 # Sidebar Configuration
 with st.sidebar:
+    svg_content = read_svg("Snowflake_Logo.svg")
+    if svg_content:
+        st.sidebar.image(svg_content, width=150)
     st.header("⚙️ Configuration")
     
     st.subheader("Snowflake Objects")
@@ -1074,24 +1102,62 @@ with tab3:
         """).to_pandas()
         
         if not analysis_df.empty:
-            # Summary metrics for ALL data
-            col1, col2, col3, col4 = st.columns(4)
+            # Summary metrics for ALL categories (including custom) - Parse METADATA
+            category_counts = {}
             
-            with col1:
-                for_sale_count = analysis_df['FOR_SALE_SIGN_DETECTED'].sum()
-                st.metric("🏠 For Sale Signs", int(for_sale_count))
+            # Parse METADATA from all rows to find all categories
+            for idx, row in analysis_df.iterrows():
+                if pd.notna(row['METADATA']) and row['METADATA']:
+                    try:
+                        metadata = None
+                        if isinstance(row['METADATA'], str):
+                            metadata = json.loads(row['METADATA'])
+                        elif isinstance(row['METADATA'], dict):
+                            metadata = row['METADATA']
+                        
+                        if metadata:
+                            for cat_id, cat_data in metadata.items():
+                                # Skip is_property_image meta category
+                                if cat_id != 'is_property_image':
+                                    if cat_id not in category_counts:
+                                        category_counts[cat_id] = 0
+                                    # Count detected instances
+                                    if isinstance(cat_data, dict) and cat_data.get('detected', False):
+                                        category_counts[cat_id] += 1
+                    except:
+                        pass
             
-            with col2:
-                solar_count = analysis_df['SOLAR_PANEL_DETECTED'].sum()
-                st.metric("☀️ Solar Panels", int(solar_count))
-            
-            with col3:
-                human_count = analysis_df['HUMAN_PRESENCE_DETECTED'].sum()
-                st.metric("👥 Human Presence", int(human_count))
-            
-            with col4:
-                damage_count = analysis_df['POTENTIAL_DAMAGE_DETECTED'].sum()
-                st.metric("⚠️ Potential Damage", int(damage_count))
+            # Display metrics dynamically based on found categories
+            if category_counts:
+                # Display in rows of 4 columns
+                category_items = list(category_counts.items())
+                
+                for i in range(0, len(category_items), 4):
+                    metric_cols = st.columns(min(4, len(category_items) - i))
+                    for col_idx, (cat_id, count) in enumerate(category_items[i:i+4]):
+                        with metric_cols[col_idx]:
+                            # Format category name nicely
+                            cat_name = cat_id.replace('_', ' ').title()
+                            st.metric(cat_name, int(count))
+            else:
+                # Fallback to default columns if no METADATA found
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    for_sale_count = analysis_df['FOR_SALE_SIGN_DETECTED'].sum()
+                    st.metric("🏠 For Sale Signs", int(for_sale_count))
+                
+                with col2:
+                    solar_count = analysis_df['SOLAR_PANEL_DETECTED'].sum()
+                    st.metric("☀️ Solar Panels", int(solar_count))
+                
+                with col3:
+                    human_count = analysis_df['HUMAN_PRESENCE_DETECTED'].sum()
+                    st.metric("👥 Human Presence", int(human_count))
+                
+                with col4:
+                    damage_count = analysis_df['POTENTIAL_DAMAGE_DETECTED'].sum()
+                    st.metric("⚠️ Potential Damage", int(damage_count))
             
             st.divider()
             
