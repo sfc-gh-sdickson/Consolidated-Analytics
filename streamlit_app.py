@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Any, Union
 from snowflake.snowpark.context import get_active_session
 from snowflake.snowpark import functions as F
 import json
+from pathlib import Path
 
 # ================================================================
 # PAGE CONFIGURATION - MUST BE FIRST STREAMLIT COMMAND
@@ -706,6 +707,9 @@ def analyze_images_with_cortex(file_name, image_files, model_name, categories, b
 def read_svg(path: str) -> Optional[str]:
     """Safely read SVG files with enhanced error handling"""
     try:
+        import logging
+        logger = logging.getLogger(__name__)
+
         svg_path = Path(path)
         if not svg_path.exists() or not svg_path.is_file():
             logger.warning(f"SVG file not found: {path}")
@@ -885,27 +889,34 @@ with st.sidebar:
         with st.spinner("Reanalyzing existing data with current categories..."):
             # Get list of images from stage
             try:
+                current_file_name = st.session_state.get('current_file')
+                if not current_file_name:
+                    st.warning("⚠️ No current PDF file selected. Please upload and process a PDF first.")
+                    st.stop()
+
+                # List only images associated with the current file name
                 stage_list = session.sql(f"LIST @{DATABASE}.{SCHEMA}.{IMAGE_STAGE}").collect()
-                image_files = [row['name'].split('/')[-1] for row in stage_list]
-                
+                # Filter image files to only include those from the current PDF
+                image_files = [row['name'].split('/')[-1] for row in stage_list if current_file_name.replace('.pdf', '').replace(' ', '_') in row['name']]
+
                 if image_files:
                     # Use the current selected model and categories
-                    st.info(f"Found {len(image_files)} images. Analyzing with {len(st.session_state['analysis_categories'])} categories...")
-                    
+                    st.info(f"Found {len(image_files)} images for \'{current_file_name}\'. Analyzing with {len(st.session_state['analysis_categories'])} categories...")
+
                     results = analyze_images_with_cortex(
-                        "reanalysis",  # file_name
+                        current_file_name,  # file_name
                         image_files,
                         selected_model,
                         st.session_state['analysis_categories'],
                         batch_size=5
                     )
-                    
+
                     if results:
-                        st.success(f"✅ Reanalyzed {len(results)} images with updated categories!")
+                        st.success(f"✅ Reanalyzed {len(results)} images from \'{current_file_name}\' with updated categories!")
                     else:
                         st.warning("⚠️ No results from reanalysis")
                 else:
-                    st.warning("⚠️ No images found in stage. Please extract images first.")
+                    st.warning(f"⚠️ No images found in stage for \'{current_file_name}\'. Please extract images first.")
             except Exception as e:
                 st.error(f"Error during reanalysis: {str(e)}")
 
@@ -1104,11 +1115,22 @@ with tab3:
         """).to_pandas()
         
         if not analysis_df.empty:
+            # Group results by batch (FILE_NAME + date) and determine the latest batch
+            analysis_df['BATCH_ID'] = analysis_df['FILE_NAME'] + " - " + pd.to_datetime(analysis_df['ANALYSIS_TIMESTAMP']).dt.strftime('%Y-%m-%d %H:%M')
+            batches = analysis_df.groupby('BATCH_ID', sort=False)
+            batch_list = list(batches.groups.keys())
+            
+            current_batch_df = pd.DataFrame() # Initialize an empty DataFrame
+            if len(batch_list) > 0:
+                latest_batch_id = batch_list[0]
+                current_batch_df = batches.get_group(latest_batch_id)
+                
             # Summary metrics for ALL categories (including custom) - Parse METADATA
             category_counts = {}
             
             # Parse METADATA from all rows to find all categories
-            for idx, row in analysis_df.iterrows():
+            # IMPORTANT: Use current_batch_df for metrics, not full analysis_df
+            for idx, row in current_batch_df.iterrows():
                 if pd.notna(row['METADATA']) and row['METADATA']:
                     try:
                         metadata = None
@@ -1141,33 +1163,27 @@ with tab3:
                             # Format category name nicely
                             cat_name = cat_id.replace('_', ' ').title()
                             st.metric(cat_name, int(count))
-            else:
-                # Fallback to default columns if no METADATA found
+            elif not current_batch_df.empty:
+                # Fallback to default columns if no METADATA found for the current batch
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    for_sale_count = analysis_df['FOR_SALE_SIGN_DETECTED'].sum()
+                    for_sale_count = current_batch_df['FOR_SALE_SIGN_DETECTED'].sum()
                     st.metric("🏠 For Sale Signs", int(for_sale_count))
                 
                 with col2:
-                    solar_count = analysis_df['SOLAR_PANEL_DETECTED'].sum()
+                    solar_count = current_batch_df['SOLAR_PANEL_DETECTED'].sum()
                     st.metric("☀️ Solar Panels", int(solar_count))
                 
                 with col3:
-                    human_count = analysis_df['HUMAN_PRESENCE_DETECTED'].sum()
+                    human_count = current_batch_df['HUMAN_PRESENCE_DETECTED'].sum()
                     st.metric("👥 Human Presence", int(human_count))
                 
                 with col4:
-                    damage_count = analysis_df['POTENTIAL_DAMAGE_DETECTED'].sum()
+                    damage_count = current_batch_df['POTENTIAL_DAMAGE_DETECTED'].sum()
                     st.metric("⚠️ Potential Damage", int(damage_count))
             
             st.divider()
-            
-            # Group results by batch (FILE_NAME + date)
-            analysis_df['BATCH_ID'] = analysis_df['FILE_NAME'] + " - " + pd.to_datetime(analysis_df['ANALYSIS_TIMESTAMP']).dt.strftime('%Y-%m-%d %H:%M')
-            batches = analysis_df.groupby('BATCH_ID', sort=False)
-            
-            batch_list = list(batches.groups.keys())
             
             # Helper function to display a single result row
             def display_result_row(row):
@@ -1266,14 +1282,11 @@ with tab3:
                 st.divider()
             
             # Display LATEST batch EXPANDED (no dropdown)
-            if len(batch_list) > 0:
-                latest_batch_id = batch_list[0]
-                latest_batch_df = batches.get_group(latest_batch_id)
-                
+            if not current_batch_df.empty:
                 st.subheader(f"📊 Latest Analysis: {latest_batch_id}")
-                st.caption(f"Showing {len(latest_batch_df)} images from most recent batch")
+                st.caption(f"Showing {len(current_batch_df)} images from most recent batch")
                 
-                for idx, row in latest_batch_df.iterrows():
+                for idx, row in current_batch_df.iterrows():
                     display_result_row(row)
             
             # Display HISTORICAL batches in DROPDOWNS
