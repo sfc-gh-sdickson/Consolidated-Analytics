@@ -17,7 +17,7 @@
   <!-- SMALL -->
   <rect x="20" y="60" width="300" height="200" rx="15" class="small-box"/>
   <text x="170" y="95" class="title-text">🔷 SMALL</text>
-  <text x="170" y="125" class="content-text">Testing & Light Usage</text>
+  <text x="170" y="125" class="content-text">Testing &amp; Light Usage</text>
   <text x="170" y="155" class="content-text">👥 1-5 Users</text>
   <text x="170" y="180" class="content-text">📄 Small PDFs</text>
   <text x="170" y="205" class="content-text">💰 Lowest Cost</text>

@@ -118,7 +118,7 @@ CREATE WAREHOUSE IF NOT EXISTS STREAMLIT_WH
 
 ## 💻 Basic Usage
 
-![Application Workflow](././images/application_workflow.svg)
+![Application Workflow](./images/application_workflow.svg)
 
 **Detailed Steps:**
 

@@ -21,7 +21,7 @@
   <line x1="600" y1="80" x2="150" y2="140" class="arrow"/>
   <rect x="20" y="140" width="260" height="80" rx="10" class="solution-box"/>
   <text x="150" y="168" class="title-text">Module not found</text>
-  <text x="30" y="195" class="content-text">✅ Add pypdf2 & pillow</text>
+  <text x="30" y="195" class="content-text">✅ Add pypdf2 &amp; pillow</text>
   <text x="30" y="215" class="content-text">in Packages tab</text>
   
   <!-- Solution 2 -->

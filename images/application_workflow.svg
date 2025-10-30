@@ -24,7 +24,7 @@
   <line x1="220" y1="100" x2="250" y2="100" class="arrow"/>
   <rect x="250" y="60" width="200" height="80" rx="10" class="extract-box"/>
   <text x="350" y="85" class="step-text">📝 2. EXTRACT</text>
-  <text x="350" y="108" class="desc-text">Text & Images</text>
+  <text x="350" y="108" class="desc-text">Text &amp; Images</text>
   <text x="350" y="128" class="desc-text">Save to Snowflake</text>
   
   <!-- Analyze -->
