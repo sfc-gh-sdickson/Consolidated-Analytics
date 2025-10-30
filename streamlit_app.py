@@ -113,9 +113,56 @@ session = get_snowflake_session()
 # Set context - use fully qualified names instead of USE statements
 # USE DATABASE/SCHEMA not supported in SiS, so we'll use fully qualified table names throughout
 
-# Initialize session state for categories
+# Initialize session state for categories - Load from DB or use defaults
 if 'analysis_categories' not in st.session_state:
-    st.session_state['analysis_categories'] = DEFAULT_CATEGORIES.copy()
+    try:
+        # Try to load saved categories from Snowflake
+        config_result = session.sql(f"""
+            SELECT CONFIG_VALUE 
+            FROM {DATABASE}.{SCHEMA}.APP_CONFIG 
+            WHERE CONFIG_KEY = 'analysis_categories'
+        """).collect()
+        
+        if config_result and config_result[0]['CONFIG_VALUE']:
+            # Parse JSON from database
+            saved_categories = json.loads(config_result[0]['CONFIG_VALUE'])
+            st.session_state['analysis_categories'] = saved_categories
+        else:
+            # No saved config, use defaults
+            st.session_state['analysis_categories'] = DEFAULT_CATEGORIES.copy()
+    except:
+        # Table doesn't exist or query failed, use defaults
+        st.session_state['analysis_categories'] = DEFAULT_CATEGORIES.copy()
+
+def save_categories_to_db():
+    """Save current categories to Snowflake for persistence"""
+    try:
+        # Convert categories to JSON
+        categories_json = json.dumps(st.session_state['analysis_categories'])
+        categories_json_escaped = categories_json.replace("'", "''")
+        
+        # Create table if it doesn't exist
+        session.sql(f"""
+            CREATE TABLE IF NOT EXISTS {DATABASE}.{SCHEMA}.APP_CONFIG (
+                CONFIG_KEY STRING PRIMARY KEY,
+                CONFIG_VALUE STRING,
+                UPDATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+            )
+        """).collect()
+        
+        # Upsert the configuration
+        session.sql(f"""
+            MERGE INTO {DATABASE}.{SCHEMA}.APP_CONFIG AS target
+            USING (SELECT 'analysis_categories' AS CONFIG_KEY, '{categories_json_escaped}' AS CONFIG_VALUE) AS source
+            ON target.CONFIG_KEY = source.CONFIG_KEY
+            WHEN MATCHED THEN UPDATE SET CONFIG_VALUE = source.CONFIG_VALUE, UPDATED_AT = CURRENT_TIMESTAMP()
+            WHEN NOT MATCHED THEN INSERT (CONFIG_KEY, CONFIG_VALUE) VALUES (source.CONFIG_KEY, source.CONFIG_VALUE)
+        """).collect()
+        
+        return True
+    except Exception as e:
+        st.error(f"Error saving categories: {str(e)}")
+        return False
 
 # ================================================================
 # HELPER FUNCTIONS
@@ -763,6 +810,7 @@ with st.sidebar:
         with col_del:
             if st.button("🗑️", key=f"delete_cat_{idx}", help=f"Delete {cat['name']}"):
                 st.session_state['analysis_categories'].pop(idx)
+                save_categories_to_db()  # Persist to database
                 st.success(f"✅ Deleted: {cat['name']}")
                 st.rerun()
     
@@ -784,6 +832,7 @@ with st.sidebar:
                             "description": new_cat_desc
                         }
                         st.session_state['analysis_categories'].append(new_category)
+                        save_categories_to_db()  # Persist to database
                         st.success(f"✅ Added category: {new_cat_name}")
                         st.rerun()
                     else:
@@ -792,6 +841,7 @@ with st.sidebar:
             with col2:
                 if st.form_submit_button("Reset to Defaults", use_container_width=True):
                     st.session_state['analysis_categories'] = DEFAULT_CATEGORIES.copy()
+                    save_categories_to_db()  # Persist to database
                     st.success("✅ Reset to default categories")
                     st.rerun()
     

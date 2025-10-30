@@ -49,8 +49,16 @@ CREATE OR REPLACE TABLE IMAGE_ANALYSIS_RESULTS (
     DAMAGE_DESCRIPTION STRING,
     FULL_ANALYSIS_TEXT STRING,
     ANALYSIS_TIMESTAMP TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
-    METADATA STRING
+    METADATA VARIANT
 ) COMMENT = 'Stores image analysis results from Cortex AI models';
+
+-- Step 3b: Create Application Configuration Table
+-- ================================================================
+CREATE TABLE IF NOT EXISTS APP_CONFIG (
+    CONFIG_KEY STRING PRIMARY KEY,
+    CONFIG_VALUE STRING,
+    UPDATED_AT TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP()
+) COMMENT = 'Stores application configuration settings (e.g., analysis categories)';
 
 -- Step 4: Create Internal Stage for Images
 -- ================================================================
