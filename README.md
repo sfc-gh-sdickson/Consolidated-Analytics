@@ -19,46 +19,13 @@ A complete Snowflake-native application for extracting text and images from PDF 
 
 ### Detection Categories
 
-```mermaid
-graph LR
-    subgraph Detection["🔍 AI Detection Capabilities"]
-        A["🏠 For Sale Signs<br/>Property Marketing"] --> Result1["✅ Detection<br/>📊 Confidence Score"]
-        B["☀️ Solar Panels<br/>Energy Assessment"] --> Result2["✅ Detection<br/>📊 Confidence Score"]
-        C["👥 Human Presence<br/>Occupancy Verification"] --> Result3["✅ Detection<br/>📊 Confidence Score"]
-        D["⚠️ Potential Damage<br/>Risk Assessment"] --> Result4["✅ Detection<br/>📝 Description<br/>📊 Confidence Score"]
-    end
-    
-    style A fill:#e3f2fd
-    style B fill:#fff3e0
-    style C fill:#e8f5e9
-    style D fill:#ffebee
-    style Result1 fill:#f3e5f5
-    style Result2 fill:#f3e5f5
-    style Result3 fill:#f3e5f5
-    style Result4 fill:#f3e5f5
-```
+<img src="images/detection_categories.svg" width="100%">
 
 ---
 
 ## ⚡ Quick Start (10 Minutes)
 
-```mermaid
-graph LR
-    Start["🚀 Start"] --> S1["1️⃣ Run setup.sql<br/>⏱️ 2 min"]
-    S1 --> S2["2️⃣ Create Warehouse<br/>⏱️ 1 min"]
-    S2 --> S3["3️⃣ Create Streamlit App<br/>⏱️ 3 min"]
-    S3 --> S4["4️⃣ Add Code<br/>⏱️ 2 min"]
-    S4 --> S5["5️⃣ Install Dependencies<br/>⏱️ 2 min"]
-    S5 --> Done["✅ Ready!<br/>⏱️ Total: 10 min"]
-    
-    style Start fill:#e3f2fd
-    style S1 fill:#f3e5f5
-    style S2 fill:#f3e5f5
-    style S3 fill:#f3e5f5
-    style S4 fill:#f3e5f5
-    style S5 fill:#f3e5f5
-    style Done fill:#e8f5e9
-```
+<img src="images/quick_start.svg" width="100%">
 
 ### Prerequisites
 - Snowflake account with Cortex AI access
@@ -125,21 +92,7 @@ CREATE WAREHOUSE IF NOT EXISTS STREAMLIT_WH
 
 ### System Overview
 
-```mermaid
-graph TD
-    A["Streamlit UI"] --> B["PDF Processing (Python UDFs)"]
-    B --> C["Text Data (Snowflake Table)"]
-    B --> D["Images (Snowflake Stage)"]
-    B --> E["Cortex AI"]
-    E --> C
-    E --> D
-    
-    style A fill:#e1f5ff
-    style B fill:#fff4e1
-    style E fill:#ffe1f5
-    style C fill:#d4edda
-    style D fill:#d4edda
-```
+<img src="images/architecture_simple.svg" width="100%">
 
 ### Snowflake Objects
 
@@ -159,33 +112,13 @@ graph TD
 
 ## 🤖 AI Models
 
-```mermaid
-graph TD
-    Models["🤖 Cortex AI Models"] --> Claude["🟣 Claude 3.5 Sonnet<br/>📝 Complex Text Analysis<br/>👍 Detailed Descriptions"]
-    Models --> GPT["🟢 GPT-4o<br/>⚖️ Balanced Performance<br/>👍 General Purpose"]
-    Models --> Pixtral["🔵 Pixtral Large<br/>👁️ Visual Understanding<br/>⭐ RECOMMENDED<br/>👍 Property Images"]
-    
-    style Models fill:#e3f2fd
-    style Claude fill:#f3e5f5
-    style GPT fill:#e8f5e9
-    style Pixtral fill:#fff3e0
-```
+<img src="images/ai_models.svg" width="100%">
 
 ---
 
 ## 💻 Basic Usage
 
-```mermaid
-graph LR
-    A["📤 1. UPLOAD PDF<br/>Choose File"] --> B["📝 2. EXTRACT<br/>Text & Images"]
-    B --> C["🤖 3. ANALYZE<br/>AI Model<br/>Batch Process"]
-    C --> D["📊 4. VIEW RESULTS<br/>Thumbnails<br/>Confidence Scores<br/>CSV Export"]
-    
-    style A fill:#e3f2fd
-    style B fill:#f3e5f5
-    style C fill:#fff3e0
-    style D fill:#e8f5e9
-```
+<img src="images/application_workflow.svg" width="100%">
 
 **Detailed Steps:**
 
@@ -240,23 +173,7 @@ Consolidated Analytics/
 
 ## 🛠️ Quick Troubleshooting
 
-```mermaid
-graph TD
-    Problem["⚠️ Issue?"] --> Q{"What's Wrong?"}
-    
-    Q -->|Module not found| S1["✅ Add pypdf2 & pillow<br/>in Packages tab"]
-    Q -->|Permission denied| S2["✅ Grant READ/WRITE<br/>on stages"]
-    Q -->|Cortex not available| S3["✅ Run: SHOW CORTEX FUNCTIONS<br/>Contact support if empty"]
-    Q -->|UDF not found| S4["✅ Re-run setup.sql<br/>Verify: SHOW FUNCTIONS"]
-    Q -->|App slow| S5["✅ Increase warehouse<br/>to MEDIUM or LARGE"]
-    
-    style Problem fill:#ffebee
-    style S1 fill:#e8f5e9
-    style S2 fill:#e8f5e9
-    style S3 fill:#e8f5e9
-    style S4 fill:#e8f5e9
-    style S5 fill:#e8f5e9
-```
+<img src="images/troubleshooting.svg" width="100%">
 
 📖 **For detailed troubleshooting, see [SETUP_GUIDE.md](SETUP_GUIDE.md)**
 
@@ -266,24 +183,7 @@ graph TD
 
 ### Warehouse Sizing
 
-```mermaid
-graph LR
-    subgraph SMALL["🔷 SMALL"]
-        S["Testing<br/>Light Usage<br/>👥 1-5 users"]
-    end
-    
-    subgraph MEDIUM["🔶 MEDIUM"]
-        M["Production<br/>⭐ RECOMMENDED<br/>👥 5-20 users"]
-    end
-    
-    subgraph LARGE["🔴 LARGE"]
-        L["Heavy Processing<br/>👥 20+ users"]
-    end
-    
-    style SMALL fill:#e3f2fd
-    style MEDIUM fill:#fff3e0
-    style LARGE fill:#ffebee
-```
+<img src="images/warehouse_sizing.svg" width="100%">
 
 ### Customization
 

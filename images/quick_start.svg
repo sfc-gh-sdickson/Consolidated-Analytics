@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1400" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .step-box { fill: #f3e5f5; stroke: #9c27b0; stroke-width: 2; }
+      .start-box { fill: #e3f2fd; stroke: #2196f3; stroke-width: 2; }
+      .done-box { fill: #e8f5e9; stroke: #4caf50; stroke-width: 2; }
+      .step-text { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .time-text { font-family: Arial, sans-serif; font-size: 13px; fill: #666; text-anchor: middle; }
+      .arrow { stroke: #666; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+  </defs>
+  
+  <!-- Start -->
+  <rect x="10" y="60" width="120" height="80" rx="10" class="start-box"/>
+  <text x="70" y="95" class="step-text">🚀 Start</text>
+  <text x="70" y="115" class="time-text">Quick Setup</text>
+  
+  <!-- Step 1 -->
+  <line x1="130" y1="100" x2="150" y2="100" class="arrow"/>
+  <rect x="150" y="60" width="160" height="80" rx="10" class="step-box"/>
+  <text x="230" y="85" class="step-text">1️⃣ Run setup.sql</text>
+  <text x="230" y="110" class="time-text">⏱️ 2 min</text>
+  <text x="230" y="130" class="time-text">Create DB Objects</text>
+  
+  <!-- Step 2 -->
+  <line x1="310" y1="100" x2="330" y2="100" class="arrow"/>
+  <rect x="330" y="60" width="160" height="80" rx="10" class="step-box"/>
+  <text x="410" y="85" class="step-text">2️⃣ Warehouse</text>
+  <text x="410" y="110" class="time-text">⏱️ 1 min</text>
+  <text x="410" y="130" class="time-text">Create Compute</text>
+  
+  <!-- Step 3 -->
+  <line x1="490" y1="100" x2="510" y2="100" class="arrow"/>
+  <rect x="510" y="60" width="160" height="80" rx="10" class="step-box"/>
+  <text x="590" y="85" class="step-text">3️⃣ Streamlit App</text>
+  <text x="590" y="110" class="time-text">⏱️ 3 min</text>
+  <text x="590" y="130" class="time-text">Create UI</text>
+  
+  <!-- Step 4 -->
+  <line x1="670" y1="100" x2="690" y2="100" class="arrow"/>
+  <rect x="690" y="60" width="160" height="80" rx="10" class="step-box"/>
+  <text x="770" y="85" class="step-text">4️⃣ Add Code</text>
+  <text x="770" y="110" class="time-text">⏱️ 2 min</text>
+  <text x="770" y="130" class="time-text">Paste App Code</text>
+  
+  <!-- Step 5 -->
+  <line x1="850" y1="100" x2="870" y2="100" class="arrow"/>
+  <rect x="870" y="60" width="160" height="80" rx="10" class="step-box"/>
+  <text x="950" y="85" class="step-text">5️⃣ Dependencies</text>
+  <text x="950" y="110" class="time-text">⏱️ 2 min</text>
+  <text x="950" y="130" class="time-text">Install Packages</text>
+  
+  <!-- Done -->
+  <line x1="1030" y1="100" x2="1050" y2="100" class="arrow"/>
+  <rect x="1050" y="60" width="180" height="80" rx="10" class="done-box"/>
+  <text x="1140" y="90" class="step-text">✅ Ready!</text>
+  <text x="1140" y="115" class="time-text">Total: 10 minutes</text>
+</svg>
+

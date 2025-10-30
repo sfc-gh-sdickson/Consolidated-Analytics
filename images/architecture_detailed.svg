@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1000" height="550" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui-box { fill: #e1f5ff; stroke: #2196f3; stroke-width: 2; }
+      .process-box { fill: #fff4e1; stroke: #ffc107; stroke-width: 2; }
+      .ai-box { fill: #ffe1f5; stroke: #e91e63; stroke-width: 2; }
+      .storage-box { fill: #d4edda; stroke: #4caf50; stroke-width: 2; }
+      .section-box { fill: none; stroke: #999; stroke-width: 2; stroke-dasharray: 5,5; }
+      .title-text { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .label-text { font-family: Arial, sans-serif; font-size: 14px; fill: #555; text-anchor: middle; }
+      .section-text { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; fill: #666; text-anchor: middle; }
+      .arrow { stroke: #666; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .dotted-arrow { stroke: #999; stroke-width: 1.5; fill: none; stroke-dasharray: 3,3; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+  </defs>
+  
+  <!-- Title -->
+  <text x="500" y="25" style="font-size: 22px; font-weight: bold; fill: #333; text-anchor: middle;">System Architecture</text>
+  
+  <!-- UI Layer -->
+  <rect x="400" y="60" width="200" height="60" rx="10" class="ui-box"/>
+  <text x="500" y="85" class="title-text">Streamlit in Snowflake</text>
+  <text x="500" y="105" class="label-text">(streamlit_app.py)</text>
+  
+  <!-- Processing Layer -->
+  <rect x="50" y="160" width="900" height="100" rx="10" class="section-box"/>
+  <text x="500" y="180" class="section-text">Processing Layer</text>
+  
+  <rect x="180" y="195" width="220" height="50" rx="8" class="process-box"/>
+  <text x="290" y="220" class="title-text">PDF Processing</text>
+  <text x="290" y="238" class="label-text">(PyPDF2 in UDFs)</text>
+  
+  <rect x="600" y="195" width="220" height="50" rx="8" class="ai-box"/>
+  <text x="710" y="220" class="title-text">Cortex AI APIs</text>
+  <text x="710" y="238" class="label-text">(Claude, GPT-4o, Pixtral)</text>
+  
+  <!-- Storage Layer -->
+  <rect x="50" y="300" width="900" height="220" rx="10" class="section-box"/>
+  <text x="500" y="320" class="section-text">Snowflake Storage Layer</text>
+  
+  <!-- Tables -->
+  <text x="250" y="350" style="font-size: 16px; font-weight: bold; fill: #555;">Tables</text>
+  <rect x="100" y="365" width="140" height="50" rx="8" class="storage-box"/>
+  <text x="170" y="395" class="title-text">PDF_TEXT_DATA</text>
+  
+  <rect x="260" y="365" width="180" height="50" rx="8" class="storage-box"/>
+  <text x="350" y="388" class="title-text">IMAGE_ANALYSIS</text>
+  <text x="350" y="405" class="title-text">_RESULTS</text>
+  
+  <rect x="100" y="440" width="140" height="50" rx="8" class="storage-box"/>
+  <text x="170" y="470" class="title-text">APP_CONFIG</text>
+  
+  <!-- Stages -->
+  <text x="700" y="350" style="font-size: 16px; font-weight: bold; fill: #555;">Stages</text>
+  <rect x="580" y="365" width="180" height="50" rx="8" class="storage-box"/>
+  <text x="670" y="388" class="title-text">PDF_IMAGES</text>
+  <text x="670" y="405" class="title-text">_STAGE</text>
+  
+  <rect x="780" y="365" width="160" height="50" rx="8" class="storage-box"/>
+  <text x="860" y="388" class="title-text">PDF_FILES</text>
+  <text x="860" y="405" class="title-text">_STAGE</text>
+  
+  <!-- Arrows -->
+  <line x1="500" y1="120" x2="290" y2="195" class="arrow"/>
+  <line x1="500" y1="120" x2="710" y2="195" class="arrow"/>
+  <line x1="290" y1="245" x2="170" y2="365" class="arrow"/>
+  <line x1="710" y1="245" x2="350" y2="365" class="arrow"/>
+  
+  <!-- Dotted connections -->
+  <line x1="500" y1="120" x2="170" y2="365" class="dotted-arrow"/>
+  <line x1="500" y1="120" x2="350" y2="365" class="dotted-arrow"/>
+  <line x1="500" y1="120" x2="170" y2="440" class="dotted-arrow"/>
+  <line x1="500" y1="120" x2="670" y2="365" class="dotted-arrow"/>
+  <line x1="500" y1="120" x2="860" y2="365" class="dotted-arrow"/>
+</svg>
+

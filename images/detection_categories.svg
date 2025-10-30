@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .cat1-box { fill: #e3f2fd; stroke: #2196f3; stroke-width: 2; }
+      .cat2-box { fill: #fff3e0; stroke: #ff9800; stroke-width: 2; }
+      .cat3-box { fill: #e8f5e9; stroke: #4caf50; stroke-width: 2; }
+      .cat4-box { fill: #ffebee; stroke: #f44336; stroke-width: 2; }
+      .result-box { fill: #f3e5f5; stroke: #9c27b0; stroke-width: 2; }
+      .title-text { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .content-text { font-family: Arial, sans-serif; font-size: 14px; fill: #555; text-anchor: middle; }
+      .arrow { stroke: #666; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+  </defs>
+  
+  <!-- For Sale Signs -->
+  <rect x="20" y="30" width="250" height="80" rx="10" class="cat1-box"/>
+  <text x="145" y="60" class="title-text">🏠 For Sale Signs</text>
+  <text x="145" y="85" class="content-text">Property Marketing</text>
+  <line x1="270" y1="70" x2="320" y2="70" class="arrow"/>
+  <rect x="320" y="30" width="180" height="80" rx="10" class="result-box"/>
+  <text x="410" y="60" class="title-text">✅ Detection</text>
+  <text x="410" y="85" class="content-text">📊 Confidence Score</text>
+  
+  <!-- Solar Panels -->
+  <rect x="20" y="140" width="250" height="80" rx="10" class="cat2-box"/>
+  <text x="145" y="170" class="title-text">☀️ Solar Panels</text>
+  <text x="145" y="195" class="content-text">Energy Assessment</text>
+  <line x1="270" y1="180" x2="320" y2="180" class="arrow"/>
+  <rect x="320" y="140" width="180" height="80" rx="10" class="result-box"/>
+  <text x="410" y="170" class="title-text">✅ Detection</text>
+  <text x="410" y="195" class="content-text">📊 Confidence Score</text>
+  
+  <!-- Human Presence -->
+  <rect x="640" y="30" width="250" height="80" rx="10" class="cat3-box"/>
+  <text x="765" y="60" class="title-text">👥 Human Presence</text>
+  <text x="765" y="85" class="content-text">Occupancy Verification</text>
+  <line x1="890" y1="70" x2="940" y2="70" class="arrow"/>
+  <rect x="940" y="30" width="180" height="80" rx="10" class="result-box"/>
+  <text x="1030" y="60" class="title-text">✅ Detection</text>
+  <text x="1030" y="85" class="content-text">📊 Confidence Score</text>
+  
+  <!-- Potential Damage -->
+  <rect x="640" y="140" width="250" height="80" rx="10" class="cat4-box"/>
+  <text x="765" y="165" class="title-text">⚠️ Potential Damage</text>
+  <text x="765" y="190" class="content-text">Risk Assessment</text>
+  <line x1="890" y1="180" x2="940" y2="180" class="arrow"/>
+  <rect x="940" y="140" width="210" height="80" rx="10" class="result-box"/>
+  <text x="1045" y="160" class="title-text">✅ Detection</text>
+  <text x="1045" y="182" class="content-text">📝 Description</text>
+  <text x="1045" y="204" class="content-text">📊 Confidence Score</text>
+</svg>
+

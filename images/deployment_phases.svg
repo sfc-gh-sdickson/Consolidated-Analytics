@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .phase-box { fill: #f3e5f5; stroke: #9c27b0; stroke-width: 2; }
+      .start-box { fill: #e3f2fd; stroke: #2196f3; stroke-width: 2; }
+      .done-box { fill: #e8f5e9; stroke: #4caf50; stroke-width: 2; }
+      .phase-text { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .time-text { font-family: Arial, sans-serif; font-size: 14px; fill: #666; text-anchor: middle; }
+      .arrow { stroke: #666; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+  </defs>
+  
+  <!-- Start -->
+  <rect x="10" y="60" width="140" height="80" rx="10" class="start-box"/>
+  <text x="80" y="95" class="phase-text">🚀 Start</text>
+  <text x="80" y="120" class="time-text">Deployment</text>
+  
+  <!-- Phase 1 -->
+  <line x1="150" y1="100" x2="170" y2="100" class="arrow"/>
+  <rect x="170" y="60" width="140" height="80" rx="10" class="phase-box"/>
+  <text x="240" y="85" class="phase-text">📦 Phase 1</text>
+  <text x="240" y="105" class="time-text">Database Setup</text>
+  <text x="240" y="125" class="time-text">⏱️ 5 min</text>
+  
+  <!-- Phase 2 -->
+  <line x1="310" y1="100" x2="330" y2="100" class="arrow"/>
+  <rect x="330" y="60" width="140" height="80" rx="10" class="phase-box"/>
+  <text x="400" y="85" class="phase-text">🏭 Phase 2</text>
+  <text x="400" y="105" class="time-text">Warehouse Setup</text>
+  <text x="400" y="125" class="time-text">⏱️ 2 min</text>
+  
+  <!-- Phase 3 -->
+  <line x1="470" y1="100" x2="490" y2="100" class="arrow"/>
+  <rect x="490" y="60" width="140" height="80" rx="10" class="phase-box"/>
+  <text x="560" y="85" class="phase-text">📱 Phase 3</text>
+  <text x="560" y="105" class="time-text">Streamlit App</text>
+  <text x="560" y="125" class="time-text">⏱️ 5 min</text>
+  
+  <!-- Phase 4 -->
+  <line x1="630" y1="100" x2="650" y2="100" class="arrow"/>
+  <rect x="650" y="60" width="140" height="80" rx="10" class="phase-box"/>
+  <text x="720" y="85" class="phase-text">📦 Phase 4</text>
+  <text x="720" y="105" class="time-text">Dependencies</text>
+  <text x="720" y="125" class="time-text">⏱️ 2 min</text>
+  
+  <!-- Phase 5 -->
+  <line x1="790" y1="100" x2="810" y2="100" class="arrow"/>
+  <rect x="810" y="60" width="140" height="80" rx="10" class="phase-box"/>
+  <text x="880" y="85" class="phase-text">🔐 Phase 5</text>
+  <text x="880" y="105" class="time-text">Permissions</text>
+  <text x="880" y="125" class="time-text">⏱️ 1 min</text>
+  
+  <!-- Done -->
+  <line x1="950" y1="100" x2="970" y2="100" class="arrow"/>
+  <rect x="970" y="60" width="220" height="80" rx="10" class="done-box"/>
+  <text x="1080" y="90" class="phase-text">✅ Complete!</text>
+  <text x="1080" y="115" class="time-text">Total: ~15 minutes</text>
+</svg>
+

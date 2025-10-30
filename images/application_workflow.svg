@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1100" height="200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .upload-box { fill: #e3f2fd; stroke: #2196f3; stroke-width: 2; }
+      .extract-box { fill: #f3e5f5; stroke: #9c27b0; stroke-width: 2; }
+      .analyze-box { fill: #fff3e0; stroke: #ff9800; stroke-width: 2; }
+      .results-box { fill: #e8f5e9; stroke: #4caf50; stroke-width: 2; }
+      .step-text { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .desc-text { font-family: Arial, sans-serif; font-size: 13px; fill: #555; text-anchor: middle; }
+      .arrow { stroke: #666; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+  </defs>
+  
+  <!-- Upload -->
+  <rect x="20" y="60" width="200" height="80" rx="10" class="upload-box"/>
+  <text x="120" y="90" class="step-text">📤 1. UPLOAD PDF</text>
+  <text x="120" y="115" class="desc-text">Choose File</text>
+  
+  <!-- Extract -->
+  <line x1="220" y1="100" x2="250" y2="100" class="arrow"/>
+  <rect x="250" y="60" width="200" height="80" rx="10" class="extract-box"/>
+  <text x="350" y="85" class="step-text">📝 2. EXTRACT</text>
+  <text x="350" y="108" class="desc-text">Text & Images</text>
+  <text x="350" y="128" class="desc-text">Save to Snowflake</text>
+  
+  <!-- Analyze -->
+  <line x1="450" y1="100" x2="480" y2="100" class="arrow"/>
+  <rect x="480" y="60" width="200" height="80" rx="10" class="analyze-box"/>
+  <text x="580" y="85" class="step-text">🤖 3. ANALYZE</text>
+  <text x="580" y="108" class="desc-text">Select AI Model</text>
+  <text x="580" y="128" class="desc-text">Batch Process</text>
+  
+  <!-- Results -->
+  <line x1="680" y1="100" x2="710" y2="100" class="arrow"/>
+  <rect x="710" y="60" width="200" height="80" rx="10" class="results-box"/>
+  <text x="810" y="80" class="step-text">📊 4. VIEW</text>
+  <text x="810" y="100" class="desc-text">Thumbnails</text>
+  <text x="810" y="118" class="desc-text">Confidence Scores</text>
+  <text x="810" y="136" class="desc-text">CSV Export</text>
+</svg>
+

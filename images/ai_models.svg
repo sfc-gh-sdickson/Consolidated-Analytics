@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1000" height="320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .claude-box { fill: #f3e5f5; stroke: #9c27b0; stroke-width: 3; }
+      .gpt-box { fill: #e8f5e9; stroke: #4caf50; stroke-width: 3; }
+      .pixtral-box { fill: #fff3e0; stroke: #ff9800; stroke-width: 3; }
+      .title-text { font-family: Arial, sans-serif; font-size: 22px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .model-title { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .content-text { font-family: Arial, sans-serif; font-size: 15px; fill: #444; text-anchor: middle; }
+    </style>
+  </defs>
+  
+  <!-- Title -->
+  <text x="500" y="35" class="title-text">🤖 Cortex AI Models Available</text>
+  
+  <!-- Claude -->
+  <rect x="40" y="70" width="280" height="220" rx="15" class="claude-box"/>
+  <text x="180" y="110" class="model-title">🟣 Claude 3.5 Sonnet</text>
+  <text x="180" y="145" class="content-text">Best For:</text>
+  <text x="180" y="170" class="content-text">📝 Complex Text Analysis</text>
+  <text x="180" y="200" class="content-text">Use Case:</text>
+  <text x="180" y="225" class="content-text">Detailed Property</text>
+  <text x="180" y="248" class="content-text">Descriptions</text>
+  
+  <!-- GPT-4o -->
+  <rect x="360" y="70" width="280" height="220" rx="15" class="gpt-box"/>
+  <text x="500" y="110" class="model-title">🟢 GPT-4o</text>
+  <text x="500" y="145" class="content-text">Best For:</text>
+  <text x="500" y="170" class="content-text">⚖️ Balanced Performance</text>
+  <text x="500" y="200" class="content-text">Use Case:</text>
+  <text x="500" y="225" class="content-text">General Purpose</text>
+  <text x="500" y="248" class="content-text">Analysis</text>
+  
+  <!-- Pixtral Large -->
+  <rect x="680" y="70" width="280" height="220" rx="15" class="pixtral-box"/>
+  <text x="820" y="105" class="model-title">🔵 Pixtral Large</text>
+  <text x="820" y="135" class="content-text">Best For:</text>
+  <text x="820" y="160" class="content-text">👁️ Visual Understanding</text>
+  <text x="820" y="190" class="content-text">Use Case:</text>
+  <text x="820" y="215" class="content-text">Property Images</text>
+  <text x="820" y="250" style="font-size: 18px; font-weight: bold; fill: #ff9800;" text-anchor="middle">⭐ RECOMMENDED</text>
+</svg>
+

@@ -58,23 +58,7 @@ SHOW CORTEX FUNCTIONS;
 
 ## Step-by-Step Deployment
 
-```mermaid
-graph TD
-    Start["🚀 Start Deployment"] --> P1["📦 Phase 1<br/>Database Setup<br/>⏱️ 5 min"]
-    P1 --> P2["🏭 Phase 2<br/>Warehouse Setup<br/>⏱️ 2 min"]
-    P2 --> P3["📱 Phase 3<br/>Streamlit App<br/>⏱️ 5 min"]
-    P3 --> P4["📦 Phase 4<br/>Dependencies<br/>⏱️ 2 min"]
-    P4 --> P5["🔐 Phase 5<br/>Permissions<br/>⏱️ 1 min"]
-    P5 --> Done["✅ Deployment Complete!<br/>⏱️ Total: ~15 minutes"]
-    
-    style Start fill:#e3f2fd
-    style P1 fill:#f3e5f5
-    style P2 fill:#f3e5f5
-    style P3 fill:#f3e5f5
-    style P4 fill:#f3e5f5
-    style P5 fill:#f3e5f5
-    style Done fill:#e8f5e9
-```
+<img src="images/deployment_phases.svg" width="100%">
 
 ### Phase 1: Database Setup (~5 minutes)
 
@@ -135,24 +119,7 @@ GRANT USAGE ON WAREHOUSE STREAMLIT_WH TO ROLE <YOUR_ROLE>;
 
 **Warehouse Size Recommendations:**
 
-```mermaid
-graph LR
-    subgraph SMALL["🔷 SMALL"]
-        S1["Testing & Light Usage<br/>👥 1-5 Users<br/>📄 Small PDFs<br/>💰 Lowest Cost"]
-    end
-    
-    subgraph MEDIUM["🔶 MEDIUM"]
-        M1["Production Use<br/>👥 5-20 Users<br/>📄 Medium PDFs<br/>💰 Moderate Cost<br/>⭐ RECOMMENDED"]
-    end
-    
-    subgraph LARGE["🔴 LARGE"]
-        L1["Heavy Processing<br/>👥 20+ Users<br/>📄 Large PDFs<br/>💰 Higher Cost"]
-    end
-    
-    style SMALL fill:#e3f2fd
-    style MEDIUM fill:#fff3e0
-    style LARGE fill:#ffebee
-```
+<img src="images/warehouse_sizing.svg" width="100%">
 
 ---
 
@@ -282,20 +249,7 @@ The application supports custom analysis categories beyond the defaults. Add cat
 
 ### Basic Application Workflow
 
-```mermaid
-graph LR
-    A["📤 UPLOAD PDF<br/>Upload & Process Tab<br/>Choose PDF File"] --> B["📝 EXTRACT TEXT<br/>Save to<br/>PDF_TEXT_DATA"]
-    A --> C["🖼️ EXTRACT IMAGES<br/>Save to<br/>PDF_IMAGES_STAGE"]
-    B --> D["🤖 ANALYZE<br/>Select AI Model<br/>Pixtral Large ⭐"]
-    C --> D
-    D --> E["📊 VIEW RESULTS<br/>Thumbnails<br/>Confidence Scores<br/>CSV Export"]
-    
-    style A fill:#e3f2fd
-    style B fill:#f3e5f5
-    style C fill:#f3e5f5
-    style D fill:#fff3e0
-    style E fill:#e8f5e9
-```
+<img src="images/application_workflow.svg" width="100%">
 
 ### Testing Checklist
 
@@ -354,25 +308,7 @@ graph LR
 
 ### Common Issues and Solutions
 
-```mermaid
-graph TD
-    Start["⚠️ Having Issues?"] --> Q1{"Error Type?"}
-    
-    Q1 -->|Module not found| S1["✅ Add pypdf2 & pillow<br/>in Packages tab"]
-    Q1 -->|UDF not found| S2["✅ Re-run setup.sql<br/>Verify: SHOW FUNCTIONS"]
-    Q1 -->|Permission denied| S3["✅ Grant READ/WRITE<br/>on stages to role"]
-    Q1 -->|Cortex not available| S4["✅ Check: SHOW CORTEX FUNCTIONS<br/>Contact Snowflake support"]
-    Q1 -->|App slow| S5["✅ Increase warehouse<br/>to MEDIUM or LARGE"]
-    Q1 -->|Buttons don't work| S6["✅ Check warehouse running<br/>Verify UDFs exist"]
-    
-    style Start fill:#ffebee
-    style S1 fill:#e8f5e9
-    style S2 fill:#e8f5e9
-    style S3 fill:#e8f5e9
-    style S4 fill:#e8f5e9
-    style S5 fill:#e8f5e9
-    style S6 fill:#e8f5e9
-```
+<img src="images/troubleshooting.svg" width="100%">
 
 **Quick Reference Table:**
 
@@ -447,41 +383,7 @@ If empty, Cortex AI may not be enabled in your account/region. Contact your Snow
 
 ### System Architecture
 
-```mermaid
-graph TB
-    UI["Streamlit in Snowflake<br/>(streamlit_app.py)"]
-    
-    subgraph Processing["Processing Layer"]
-        PDF_Extract["PDF Processing<br/>(PyPDF2 in UDFs)<br/>• Text Extract<br/>• Image Count"]
-        AI_Analysis["Cortex AI APIs<br/>• Claude<br/>• GPT-4o<br/>• Pixtral Large"]
-    end
-    
-    subgraph Storage["Snowflake Storage Layer"]
-        subgraph Tables["Tables"]
-            T1["PDF_TEXT_DATA"]
-            T2["IMAGE_ANALYSIS_RESULTS"]
-            T3["APP_CONFIG"]
-        end
-        subgraph Stages["Stages"]
-            S1["PDF_IMAGES_STAGE"]
-            S2["PDF_FILES_STAGE"]
-        end
-    end
-    
-    UI --> PDF_Extract
-    UI --> AI_Analysis
-    PDF_Extract --> T1
-    AI_Analysis --> T2
-    UI -.reads/writes.-> T1
-    UI -.reads/writes.-> T2
-    UI -.reads/writes.-> T3
-    UI -.reads/writes.-> S1
-    UI -.reads/writes.-> S2
-
-    style UI fill:#e1f5ff
-    style PDF_Extract fill:#fff4e1
-    style AI_Analysis fill:#ffe1f5
-```
+<img src="images/architecture_detailed.svg" width="100%">
 
 ### Data Flow
 
@@ -544,64 +446,15 @@ GRANT USAGE ON STREAMLIT PDF_ANALYTICS_DB.PDF_PROCESSING.PDF_PROCESSING_APP TO R
 
 ### Processing Times (Typical)
 
-```mermaid
-graph TD
-    subgraph Small["📄 SMALL PDF (10 pages, 5 images)"]
-        S1["📝 Text Extraction<br/>⏱️ < 10 seconds"]
-        S2["🖼️ Image Extraction<br/>⏱️ < 15 seconds"]
-        S3["🤖 Image Analysis<br/>⏱️ ~30 sec/image<br/>📊 ~2.5 min total"]
-        S4["📊 Results Display<br/>⏱️ < 2 seconds"]
-    end
-    
-    subgraph Large["📚 LARGE PDF (50 pages, 25 images)"]
-        L1["📝 Text Extraction<br/>⏱️ < 30 seconds"]
-        L2["🖼️ Image Extraction<br/>⏱️ < 60 seconds"]
-        L3["🤖 Image Analysis<br/>⏱️ ~2.5 min/image<br/>📊 ~62 min total"]
-        L4["📊 Results Display<br/>⏱️ < 5 seconds"]
-    end
-    
-    style Small fill:#e8f5e9
-    style Large fill:#fff3e0
-```
+<img src="images/processing_times.svg" width="100%">
 
 ### Warehouse Sizing
 
-```mermaid
-graph LR
-    subgraph Decision["Choose Warehouse Size"]
-        Q["How many users?<br/>What PDF size?"]
-    end
-    
-    Q -->|"1-5 users<br/><20 pages"| S["🔷 SMALL<br/>💰 Lowest Cost<br/>📄 Small PDFs"]
-    Q -->|"5-20 users<br/>20-100 pages"| M["🔶 MEDIUM<br/>💰 Moderate Cost<br/>📄 Medium PDFs<br/>⭐ RECOMMENDED"]
-    Q -->|"20+ users<br/>100+ pages"| L["🔴 LARGE<br/>💰 Higher Cost<br/>📄 Large PDFs"]
-    
-    style Decision fill:#e3f2fd
-    style S fill:#e8f5e9
-    style M fill:#fff3e0
-    style L fill:#ffebee
-```
+<img src="images/warehouse_sizing.svg" width="100%">
 
 ### Batch Processing
 
-```mermaid
-graph LR
-    subgraph B1["Batch Size 1-3"]
-        Sequential["📝 Sequential<br/>🔄 One at a time<br/>👍 Small workloads"]
-    end
-    
-    subgraph B2["Batch Size 5"]
-        Balanced["⚖️ Balanced<br/>🔄 Parallel processing<br/>⭐ RECOMMENDED<br/>👍 Most use cases"]
-    end
-    
-    subgraph B3["Batch Size 8-10"]
-        Maximum["⚡ Maximum<br/>🔄 Max parallelism<br/>👍 Large image sets<br/>⚠️ More resources"]
-    end
-    
-    style B1 fill:#e3f2fd
-    style B2 fill:#e8f5e9
-    style B3 fill:#fff3e0
-```
+<img src="images/batch_processing.svg" width="100%">
 
 Adjust batch size for optimal performance:
 - **Batch size 1-3**: Sequential processing, good for small workloads

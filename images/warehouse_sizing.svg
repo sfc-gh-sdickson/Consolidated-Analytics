@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1000" height="280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .small-box { fill: #e3f2fd; stroke: #2196f3; stroke-width: 3; }
+      .medium-box { fill: #fff3e0; stroke: #ff9800; stroke-width: 3; }
+      .large-box { fill: #ffebee; stroke: #f44336; stroke-width: 3; }
+      .title-text { font-family: Arial, sans-serif; font-size: 20px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .content-text { font-family: Arial, sans-serif; font-size: 16px; fill: #444; text-anchor: middle; }
+      .small-text { font-family: Arial, sans-serif; font-size: 14px; fill: #666; text-anchor: middle; }
+    </style>
+  </defs>
+  
+  <!-- Title -->
+  <text x="500" y="30" class="title-text">Warehouse Size Recommendations</text>
+  
+  <!-- SMALL -->
+  <rect x="20" y="60" width="300" height="200" rx="15" class="small-box"/>
+  <text x="170" y="95" class="title-text">🔷 SMALL</text>
+  <text x="170" y="125" class="content-text">Testing & Light Usage</text>
+  <text x="170" y="155" class="content-text">👥 1-5 Users</text>
+  <text x="170" y="180" class="content-text">📄 Small PDFs</text>
+  <text x="170" y="205" class="content-text">💰 Lowest Cost</text>
+  <text x="170" y="240" class="small-text">&lt; 20 pages</text>
+  
+  <!-- MEDIUM -->
+  <rect x="350" y="60" width="300" height="200" rx="15" class="medium-box"/>
+  <text x="500" y="95" class="title-text">🔶 MEDIUM</text>
+  <text x="500" y="125" class="content-text">Production Use</text>
+  <text x="500" y="155" class="content-text">👥 5-20 Users</text>
+  <text x="500" y="180" class="content-text">📄 Medium PDFs</text>
+  <text x="500" y="205" class="content-text">💰 Moderate Cost</text>
+  <text x="500" y="235" class="title-text" style="fill: #ff9800;">⭐ RECOMMENDED</text>
+  
+  <!-- LARGE -->
+  <rect x="680" y="60" width="300" height="200" rx="15" class="large-box"/>
+  <text x="830" y="95" class="title-text">🔴 LARGE</text>
+  <text x="830" y="125" class="content-text">Heavy Processing</text>
+  <text x="830" y="155" class="content-text">👥 20+ Users</text>
+  <text x="830" y="180" class="content-text">📄 Large PDFs</text>
+  <text x="830" y="205" class="content-text">💰 Higher Cost</text>
+  <text x="830" y="240" class="small-text">100+ pages</text>
+</svg>
+

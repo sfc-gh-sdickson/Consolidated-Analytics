@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="900" height="380" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .small-box { fill: #e8f5e9; stroke: #4caf50; stroke-width: 3; }
+      .large-box { fill: #fff3e0; stroke: #ff9800; stroke-width: 3; }
+      .title-text { font-family: Arial, sans-serif; font-size: 20px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .label-text { font-family: Arial, sans-serif; font-size: 15px; font-weight: bold; fill: #444; text-anchor: start; }
+      .time-text { font-family: Arial, sans-serif; font-size: 14px; fill: #666; text-anchor: start; }
+    </style>
+  </defs>
+  
+  <!-- Title -->
+  <text x="450" y="30" class="title-text">Processing Times (Typical)</text>
+  
+  <!-- SMALL PDF -->
+  <rect x="40" y="60" width="380" height="280" rx="15" class="small-box"/>
+  <text x="230" y="95" class="title-text">📄 SMALL PDF</text>
+  <text x="230" y="120" style="font-size: 16px; text-anchor: middle; fill: #555;">(10 pages, 5 images)</text>
+  
+  <text x="60" y="160" class="label-text">📝 Text Extraction:</text>
+  <text x="60" y="185" class="time-text">⏱️ &lt; 10 seconds</text>
+  
+  <text x="60" y="220" class="label-text">🖼️ Image Extraction:</text>
+  <text x="60" y="245" class="time-text">⏱️ &lt; 15 seconds</text>
+  
+  <text x="60" y="280" class="label-text">🤖 Image Analysis:</text>
+  <text x="60" y="305" class="time-text">⏱️ ~30 sec/image</text>
+  <text x="60" y="325" class="time-text">📊 ~2.5 min total</text>
+  
+  <!-- LARGE PDF -->
+  <rect x="480" y="60" width="380" height="280" rx="15" class="large-box"/>
+  <text x="670" y="95" class="title-text">📚 LARGE PDF</text>
+  <text x="670" y="120" style="font-size: 16px; text-anchor: middle; fill: #555;">(50 pages, 25 images)</text>
+  
+  <text x="500" y="160" class="label-text">📝 Text Extraction:</text>
+  <text x="500" y="185" class="time-text">⏱️ &lt; 30 seconds</text>
+  
+  <text x="500" y="220" class="label-text">🖼️ Image Extraction:</text>
+  <text x="500" y="245" class="time-text">⏱️ &lt; 60 seconds</text>
+  
+  <text x="500" y="280" class="label-text">🤖 Image Analysis:</text>
+  <text x="500" y="305" class="time-text">⏱️ ~2.5 min/image</text>
+  <text x="500" y="325" class="time-text">📊 ~62 min total</text>
+</svg>
+

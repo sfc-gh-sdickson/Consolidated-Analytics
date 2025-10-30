@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ui-box { fill: #e1f5ff; stroke: #2196f3; stroke-width: 3; }
+      .process-box { fill: #fff4e1; stroke: #ffc107; stroke-width: 3; }
+      .ai-box { fill: #ffe1f5; stroke: #e91e63; stroke-width: 3; }
+      .storage-box { fill: #d4edda; stroke: #4caf50; stroke-width: 3; }
+      .title-text { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; fill: #333; text-anchor: middle; }
+      .content-text { font-family: Arial, sans-serif; font-size: 14px; fill: #555; text-anchor: middle; }
+      .arrow { stroke: #666; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+  </defs>
+  
+  <!-- Streamlit UI -->
+  <rect x="300" y="30" width="200" height="80" rx="10" class="ui-box"/>
+  <text x="400" y="65" class="title-text">Streamlit UI</text>
+  <text x="400" y="90" class="content-text">User Interface</text>
+  
+  <!-- PDF Processing -->
+  <line x1="400" y1="110" x2="400" y2="140" class="arrow"/>
+  <rect x="250" y="140" width="300" height="80" rx="10" class="process-box"/>
+  <text x="400" y="170" class="title-text">PDF Processing</text>
+  <text x="400" y="195" class="content-text">(Python UDFs)</text>
+  
+  <!-- Text Data -->
+  <line x1="300" y1="220" x2="150" y2="280" class="arrow"/>
+  <rect x="50" y="280" width="200" height="80" rx="10" class="storage-box"/>
+  <text x="150" y="310" class="title-text">Text Data</text>
+  <text x="150" y="335" class="content-text">(Snowflake Table)</text>
+  
+  <!-- Images -->
+  <line x1="400" y1="220" x2="400" y2="280" class="arrow"/>
+  <rect x="300" y="280" width="200" height="80" rx="10" class="storage-box"/>
+  <text x="400" y="310" class="title-text">Images</text>
+  <text x="400" y="335" class="content-text">(Snowflake Stage)</text>
+  
+  <!-- Cortex AI -->
+  <line x1="500" y1="220" x2="650" y2="280" class="arrow"/>
+  <rect x="550" y="280" width="200" height="80" rx="10" class="ai-box"/>
+  <text x="650" y="310" class="title-text">Cortex AI</text>
+  <text x="650" y="335" class="content-text">Analysis</text>
+  
+  <!-- Return arrows -->
+  <line x1="650" y1="280" x2="250" y2="210" class="arrow" stroke-dasharray="5,5"/>
+  <line x1="650" y1="300" x2="400" y2="270" class="arrow" stroke-dasharray="5,5"/>
+</svg>
+
