@@ -58,7 +58,7 @@ SHOW CORTEX FUNCTIONS;
 
 ## Step-by-Step Deployment
 
-![Deployment Phases](images/deployment_phases.svg)
+![Deployment Phases](./images/deployment_phases.svg)
 
 ### Phase 1: Database Setup (~5 minutes)
 
@@ -119,7 +119,7 @@ GRANT USAGE ON WAREHOUSE STREAMLIT_WH TO ROLE <YOUR_ROLE>;
 
 **Warehouse Size Recommendations:**
 
-![Warehouse Sizing](images/warehouse_sizing.svg)
+![Warehouse Sizing](./images/warehouse_sizing.svg)
 
 ---
 
@@ -249,7 +249,7 @@ The application supports custom analysis categories beyond the defaults. Add cat
 
 ### Basic Application Workflow
 
-![Application Workflow](images/application_workflow.svg)
+![Application Workflow](./images/application_workflow.svg)
 
 ### Testing Checklist
 
@@ -308,7 +308,7 @@ The application supports custom analysis categories beyond the defaults. Add cat
 
 ### Common Issues and Solutions
 
-![Troubleshooting](images/troubleshooting.svg)
+![Troubleshooting](./images/troubleshooting.svg)
 
 **Quick Reference Table:**
 
@@ -383,7 +383,7 @@ If empty, Cortex AI may not be enabled in your account/region. Contact your Snow
 
 ### System Architecture
 
-![System Architecture](images/architecture_detailed.svg)
+![System Architecture](./images/architecture_detailed.svg)
 
 ### Data Flow
 
@@ -446,15 +446,15 @@ GRANT USAGE ON STREAMLIT PDF_ANALYTICS_DB.PDF_PROCESSING.PDF_PROCESSING_APP TO R
 
 ### Processing Times (Typical)
 
-![Processing Times](images/processing_times.svg)
+![Processing Times](./images/processing_times.svg)
 
 ### Warehouse Sizing
 
-![Warehouse Sizing Decision](images/warehouse_sizing.svg)
+![Warehouse Sizing Decision](./images/warehouse_sizing.svg)
 
 ### Batch Processing
 
-![Batch Processing](images/batch_processing.svg)
+![Batch Processing](./images/batch_processing.svg)
 
 Adjust batch size for optimal performance:
 - **Batch size 1-3**: Sequential processing, good for small workloads
