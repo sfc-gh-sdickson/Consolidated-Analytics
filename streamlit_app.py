@@ -279,15 +279,22 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                 width = obj['/Width']
                                 height = obj['/Height']
                                 
-                                # FILTER: Skip small images (likely logos, icons, or decorative elements)
-                                # Property images are typically larger than 200x200 pixels
-                                if width < 200 or height < 200:
+                                # FILTER 1: Skip small images (likely logos, icons, or decorative elements)
+                                # Property images are typically larger than 300x300 pixels
+                                if width < 300 or height < 300:
                                     skipped_images += 1
                                     continue
                                 
-                                # FILTER: Skip very wide/narrow images (likely headers, footers, or decorative bars)
+                                # FILTER 2: Skip very wide images (likely maps, headers, or decorative bars)
+                                # Maps are often very wide. Property photos are more square/portrait
                                 aspect_ratio = width / height
-                                if aspect_ratio > 5 or aspect_ratio < 0.2:
+                                if aspect_ratio > 2.5 or aspect_ratio < 0.3:
+                                    skipped_images += 1
+                                    continue
+                                
+                                # FILTER 3: Skip very large images that are wide (likely maps or diagrams)
+                                # Maps tend to be both large and wide
+                                if width > 2000 and aspect_ratio > 1.5:
                                     skipped_images += 1
                                     continue
                                 
@@ -999,7 +1006,7 @@ with tab3:
                         
                         if url_result and url_result[0]['URL']:
                             image_url = url_result[0]['URL']
-                            st.image(image_url, width=150)  # Fixed width instead of use_container_width for smaller size
+                            st.image(image_url, width=190)  # 25% larger than original 150px
                         else:
                             st.info("🖼️ No image")
                     except Exception as img_error:
