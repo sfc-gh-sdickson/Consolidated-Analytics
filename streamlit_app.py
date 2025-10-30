@@ -957,7 +957,7 @@ with tab3:
         """).to_pandas()
         
         if not analysis_df.empty:
-            # Summary metrics
+            # Summary metrics for ALL data
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
@@ -978,117 +978,139 @@ with tab3:
             
             st.divider()
             
-            # Detailed results with thumbnails
-            st.subheader("Detailed Analysis Results")
+            # Group results by batch (FILE_NAME + date)
+            analysis_df['BATCH_ID'] = analysis_df['FILE_NAME'] + " - " + pd.to_datetime(analysis_df['ANALYSIS_TIMESTAMP']).dt.strftime('%Y-%m-%d %H:%M')
+            batches = analysis_df.groupby('BATCH_ID', sort=False)
             
-            # Display results in a more visual format with thumbnails
-            for idx, row in analysis_df.iterrows():
-                with st.expander(f"📄 {row['FILE_NAME']} - Image: {row['IMAGE_NAME']} (Page {row['PAGE_NUMBER']})"):
-                    col_img, col_data = st.columns([1, 3])
-                    
-                    with col_img:
-                        # Display thumbnail
-                        try:
-                            # Get image from stage using GET_PRESIGNED_URL
-                            image_url_query = f"""
-                                SELECT GET_PRESIGNED_URL(@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}, '{row['IMAGE_NAME']}', 3600) AS URL
-                            """
-                            url_result = session.sql(image_url_query).collect()
-                            
-                            if url_result and url_result[0]['URL']:
-                                image_url = url_result[0]['URL']
-                                st.image(image_url, caption=row['IMAGE_NAME'], use_container_width=True)
-                            else:
-                                st.info("🖼️ Image thumbnail not available")
-                        except Exception as img_error:
-                            st.warning(f"Could not load thumbnail: {str(img_error)}")
-                            st.info("🖼️ Image thumbnail not available")
-                    
-                    with col_data:
-                        st.markdown(f"**Model:** {row['MODEL_NAME']}")
-                        st.markdown(f"**Analysis Time:** {row['ANALYSIS_TIMESTAMP']}")
+            batch_list = list(batches.groups.keys())
+            
+            # Helper function to display a single result row
+            def display_result_row(row):
+                col_img, col_data = st.columns([1, 5])  # Changed from [1, 3] to [1, 5] for smaller images
+                
+                with col_img:
+                    # Display thumbnail at 50% size
+                    try:
+                        # Get image from stage using GET_PRESIGNED_URL
+                        image_url_query = f"""
+                            SELECT GET_PRESIGNED_URL(@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}, '{row['IMAGE_NAME']}', 3600) AS URL
+                        """
+                        url_result = session.sql(image_url_query).collect()
                         
-                        # Display detection results - use METADATA if available (contains all categories)
-                        st.markdown("#### Detection Results:")
-                        
-                        # Try to parse METADATA for all categories (including custom)
-                        all_categories = {}
-                        if pd.notna(row['METADATA']) and row['METADATA']:
-                            try:
-                                if isinstance(row['METADATA'], str):
-                                    all_categories = json.loads(row['METADATA'])
-                                elif isinstance(row['METADATA'], dict):
-                                    all_categories = row['METADATA']
-                            except:
-                                pass
-                        
-                        # Display all categories from METADATA
-                        if all_categories:
-                            # Check if it's a property image first
-                            is_property = all_categories.get('is_property_image', {})
-                            if is_property and not is_property.get('detected', True):
-                                st.warning(f"⚠️ Not a property image: {is_property.get('description', 'N/A')}")
-                            
-                            # Display all other categories dynamically
-                            category_items = [(k, v) for k, v in all_categories.items() if k != 'is_property_image']
-                            
-                            # Display in rows of 4
-                            for i in range(0, len(category_items), 4):
-                                result_cols = st.columns(min(4, len(category_items) - i))
-                                for col_idx, (cat_id, cat_data) in enumerate(category_items[i:i+4]):
-                                    with result_cols[col_idx]:
-                                        detected = cat_data.get('detected', False)
-                                        confidence = cat_data.get('confidence', 0)
-                                        # Format category name nicely
-                                        cat_name = cat_id.replace('_', ' ').title()
-                                        
-                                        if detected:
-                                            st.success(f"✓ {cat_name}: YES ({confidence:.0f}%)")
-                                        else:
-                                            st.info(f"✗ {cat_name}: NO ({confidence:.0f}%)")
-                                        
-                                        # Show description if available
-                                        desc = cat_data.get('description', '')
-                                        if desc and len(desc) > 0:
-                                            st.caption(desc[:100])
+                        if url_result and url_result[0]['URL']:
+                            image_url = url_result[0]['URL']
+                            st.image(image_url, width=150)  # Fixed width instead of use_container_width for smaller size
                         else:
-                            # Fallback to default columns if METADATA not available
-                            result_cols = st.columns(4)
-                            with result_cols[0]:
-                                if row['FOR_SALE_SIGN_DETECTED']:
-                                    st.success(f"🏠 For Sale: YES ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
-                                else:
-                                    st.info(f"🏠 For Sale: NO ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
-                            
-                            with result_cols[1]:
-                                if row['SOLAR_PANEL_DETECTED']:
-                                    st.success(f"☀️ Solar: YES ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
-                                else:
-                                    st.info(f"☀️ Solar: NO ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
-                            
-                            with result_cols[2]:
-                                if row['HUMAN_PRESENCE_DETECTED']:
-                                    st.success(f"👥 Human: YES ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
-                                else:
-                                    st.info(f"👥 Human: NO ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
-                            
-                            with result_cols[3]:
-                                if row['POTENTIAL_DAMAGE_DETECTED']:
-                                    st.warning(f"⚠️ Damage: YES ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
-                                else:
-                                    st.info(f"⚠️ Damage: NO ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
-                            
-                            if row['DAMAGE_DESCRIPTION']:
-                                st.markdown(f"**Damage Description:** {row['DAMAGE_DESCRIPTION']}")
+                            st.info("🖼️ No image")
+                    except Exception as img_error:
+                        st.info("🖼️ No image")
+                
+                with col_data:
+                    st.markdown(f"**Image:** {row['IMAGE_NAME']} | **Page:** {row['PAGE_NUMBER']} | **Model:** {row['MODEL_NAME']}")
+                    
+                    # Try to parse METADATA for all categories (including custom)
+                    all_categories = {}
+                    if pd.notna(row['METADATA']) and row['METADATA']:
+                        try:
+                            if isinstance(row['METADATA'], str):
+                                all_categories = json.loads(row['METADATA'])
+                            elif isinstance(row['METADATA'], dict):
+                                all_categories = row['METADATA']
+                        except:
+                            pass
+                    
+                    # Display all categories from METADATA
+                    if all_categories:
+                        # Check if it's a property image first
+                        is_property = all_categories.get('is_property_image', {})
+                        if is_property and not is_property.get('detected', True):
+                            st.warning(f"⚠️ Not a property image: {is_property.get('description', 'N/A')}")
+                        
+                        # Display all other categories dynamically
+                        category_items = [(k, v) for k, v in all_categories.items() if k != 'is_property_image']
+                        
+                        # Display in rows of 4
+                        for i in range(0, len(category_items), 4):
+                            result_cols = st.columns(min(4, len(category_items) - i))
+                            for col_idx, (cat_id, cat_data) in enumerate(category_items[i:i+4]):
+                                with result_cols[col_idx]:
+                                    detected = cat_data.get('detected', False)
+                                    confidence = cat_data.get('confidence', 0)
+                                    # Format category name nicely
+                                    cat_name = cat_id.replace('_', ' ').title()
+                                    
+                                    if detected:
+                                        st.success(f"✓ {cat_name}: YES ({confidence:.0f}%)")
+                                    else:
+                                        st.info(f"✗ {cat_name}: NO ({confidence:.0f}%)")
+                                    
+                                    # Show description if available
+                                    desc = cat_data.get('description', '')
+                                    if desc and len(desc) > 0:
+                                        st.caption(desc[:100])
+                    else:
+                        # Fallback to default columns if METADATA not available
+                        result_cols = st.columns(4)
+                        with result_cols[0]:
+                            if row['FOR_SALE_SIGN_DETECTED']:
+                                st.success(f"🏠 For Sale: YES ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
+                            else:
+                                st.info(f"🏠 For Sale: NO ({row['FOR_SALE_SIGN_CONFIDENCE']:.0f}%)")
+                        
+                        with result_cols[1]:
+                            if row['SOLAR_PANEL_DETECTED']:
+                                st.success(f"☀️ Solar: YES ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
+                            else:
+                                st.info(f"☀️ Solar: NO ({row['SOLAR_PANEL_CONFIDENCE']:.0f}%)")
+                        
+                        with result_cols[2]:
+                            if row['HUMAN_PRESENCE_DETECTED']:
+                                st.success(f"👥 Human: YES ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
+                            else:
+                                st.info(f"👥 Human: NO ({row['HUMAN_PRESENCE_CONFIDENCE']:.0f}%)")
+                        
+                        with result_cols[3]:
+                            if row['POTENTIAL_DAMAGE_DETECTED']:
+                                st.warning(f"⚠️ Damage: YES ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
+                            else:
+                                st.info(f"⚠️ Damage: NO ({row['POTENTIAL_DAMAGE_CONFIDENCE']:.0f}%)")
+                        
+                        if row['DAMAGE_DESCRIPTION']:
+                            st.markdown(f"**Damage Description:** {row['DAMAGE_DESCRIPTION']}")
+                
+                st.divider()
+            
+            # Display LATEST batch EXPANDED (no dropdown)
+            if len(batch_list) > 0:
+                latest_batch_id = batch_list[0]
+                latest_batch_df = batches.get_group(latest_batch_id)
+                
+                st.subheader(f"📊 Latest Analysis: {latest_batch_id}")
+                st.caption(f"Showing {len(latest_batch_df)} images from most recent batch")
+                
+                for idx, row in latest_batch_df.iterrows():
+                    display_result_row(row)
+            
+            # Display HISTORICAL batches in DROPDOWNS
+            if len(batch_list) > 1:
+                st.divider()
+                st.subheader("📚 Historical Analysis Results")
+                
+                for batch_id in batch_list[1:]:  # Skip first (already shown)
+                    batch_df = batches.get_group(batch_id)
+                    
+                    with st.expander(f"📄 {batch_id} ({len(batch_df)} images)"):
+                        for idx, row in batch_df.iterrows():
+                            display_result_row(row)
             
             st.divider()
             
             # Also show tabular view
-            st.subheader("Tabular View")
-            st.dataframe(analysis_df, use_container_width=True, height=300)
+            st.subheader("Tabular View (All Results)")
+            st.dataframe(analysis_df.drop(columns=['BATCH_ID']), use_container_width=True, height=300)
             
             # Download option
-            csv = analysis_df.to_csv(index=False)
+            csv = analysis_df.drop(columns=['BATCH_ID']).to_csv(index=False)
             st.download_button(
                 label="📥 Download Analysis Results",
                 data=csv,
