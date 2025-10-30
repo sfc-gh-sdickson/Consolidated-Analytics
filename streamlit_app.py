@@ -271,45 +271,17 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                             
                             # Update progress
                             progress_bar.progress(processed / total_potential_images)
-                            status_text.text(f"Processing image {processed} of {total_potential_images}...")
+                            status_text.text(f"Analyzing image {processed} of {total_potential_images} with AI...")
                             
                             # Extract image data
                             try:
                                 # Get image properties
                                 width = obj['/Width']
                                 height = obj['/Height']
-                                aspect_ratio = width / height
                                 
-                                # SMART MAP FILTERING - Keep property photos, reject maps
-                                # Property photos: Can be portrait (0.6-0.9), square (0.9-1.2), or landscape (1.2-2.0)
-                                # Maps: Typically VERY wide (>2.5) OR large squares OR very high-res wide images
-                                
-                                # FILTER 1: Skip tiny images (logos, icons)
-                                if width < 300 or height < 300:
-                                    skipped_images += 1
-                                    continue
-                                
-                                # FILTER 2: Reject VERY wide images (clearly maps)
-                                # Property photos are rarely wider than 2:1
-                                # Maps are often 2.5:1, 3:1, or wider
-                                if aspect_ratio > 2.0:
-                                    skipped_images += 1
-                                    continue
-                                
-                                # FILTER 3: Reject large + wide combinations (maps)
-                                # Maps are often both large AND moderately wide
-                                if width > 1500 and aspect_ratio > 1.6:
-                                    skipped_images += 1
-                                    continue
-                                
-                                # FILTER 4: Reject very large squares (often maps)
-                                # Maps at 1:1 ratio, very high resolution
-                                if abs(aspect_ratio - 1.0) < 0.1 and width > 1600:
-                                    skipped_images += 1
-                                    continue
-                                
-                                # FILTER 5: Reject extreme portrait (decorative elements)
-                                if aspect_ratio < 0.5:
+                                # MINIMAL SIZE FILTERING - Only skip tiny logos/icons
+                                # We'll use AI to detect maps vs properties, not size
+                                if width < 200 or height < 200:
                                     skipped_images += 1
                                     continue
                                 
@@ -340,7 +312,7 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                     
                                     # Create a meaningful filename
                                     base_name = file_name.replace('.pdf', '').replace(' ', '_')
-                                    image_filename = f"{base_name}_page{page_num}_img{len(extracted_images)+1}.{ext}"
+                                    image_filename = f"{base_name}_page{page_num}_img{total_images_found}.{ext}"
                                     
                                     put_result = session.file.put(
                                         tmp_path,
@@ -354,7 +326,36 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                         uploaded_filename = put_result[0].target
                                         # Extract just the filename without path
                                         actual_image_name = uploaded_filename.split('/')[-1]
-                                        extracted_images.append(actual_image_name)
+                                        
+                                        # AI CONTENT FILTERING - Check if this is actually a property photo
+                                        try:
+                                            check_query = f"""
+                                                SELECT SNOWFLAKE.CORTEX.COMPLETE(
+                                                    'pixtral-large',
+                                                    'Is this image a photograph of an actual house, building, or property? Answer ONLY with YES or NO. If this is a map, diagram, chart, logo, or anything other than an actual property photograph, answer NO.',
+                                                    TO_FILE('@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}', '{actual_image_name}')
+                                                ) AS RESPONSE
+                                            """
+                                            ai_result = session.sql(check_query).collect()
+                                            ai_response = ai_result[0]['RESPONSE'].strip().upper() if ai_result else ""
+                                            
+                                            # Only keep if AI confirms it's a property photo
+                                            if 'YES' in ai_response:
+                                                extracted_images.append(actual_image_name)
+                                            else:
+                                                # It's a map/diagram/logo - delete it
+                                                skipped_images += 1
+                                                try:
+                                                    session.sql(f"REMOVE @{DATABASE}.{SCHEMA}.{IMAGE_STAGE}/{actual_image_name}").collect()
+                                                except:
+                                                    pass
+                                        except Exception as ai_error:
+                                            # If AI check fails, be conservative and skip the image
+                                            skipped_images += 1
+                                            try:
+                                                session.sql(f"REMOVE @{DATABASE}.{SCHEMA}.{IMAGE_STAGE}/{actual_image_name}").collect()
+                                            except:
+                                                pass
                                 finally:
                                     # Clean up temp file
                                     if os.path.exists(tmp_path):
@@ -369,9 +370,9 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
         progress_bar.empty()
         
         if extracted_images:
-            status_text.success(f"✅ Extracted {len(extracted_images)} property images from {len(reader.pages)} pages (skipped {skipped_images} non-property images)")
+            status_text.success(f"✅ Extracted {len(extracted_images)} property photos from {len(reader.pages)} pages (AI rejected {skipped_images} maps/logos/diagrams)")
         else:
-            status_text.warning(f"⚠️ No property images found. Found {total_images_found} total images but all were filtered out (logos, maps, or decorative elements)")
+            status_text.warning(f"⚠️ No property photos found. AI analyzed {total_images_found} images - all were maps, logos, diagrams, or decorative elements (not property photos)")
         
         return extracted_images
     except Exception as e:
