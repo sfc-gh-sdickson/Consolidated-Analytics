@@ -19,13 +19,13 @@ A complete Snowflake-native application for extracting text and images from PDF 
 
 ### Detection Categories
 
-<img src="images/detection_categories.svg" width="100%">
+![Detection Categories](images/detection_categories.svg)
 
 ---
 
 ## ⚡ Quick Start (10 Minutes)
 
-<img src="images/quick_start.svg" width="100%">
+![Quick Start](images/quick_start.svg)
 
 ### Prerequisites
 - Snowflake account with Cortex AI access
@@ -92,7 +92,7 @@ CREATE WAREHOUSE IF NOT EXISTS STREAMLIT_WH
 
 ### System Overview
 
-<img src="images/architecture_simple.svg" width="100%">
+![System Architecture](images/architecture_simple.svg)
 
 ### Snowflake Objects
 
@@ -112,13 +112,13 @@ CREATE WAREHOUSE IF NOT EXISTS STREAMLIT_WH
 
 ## 🤖 AI Models
 
-<img src="images/ai_models.svg" width="100%">
+![AI Models](images/ai_models.svg)
 
 ---
 
 ## 💻 Basic Usage
 
-<img src="images/application_workflow.svg" width="100%">
+![Application Workflow](images/application_workflow.svg)
 
 **Detailed Steps:**
 
@@ -173,7 +173,7 @@ Consolidated Analytics/
 
 ## 🛠️ Quick Troubleshooting
 
-<img src="images/troubleshooting.svg" width="100%">
+![Troubleshooting](images/troubleshooting.svg)
 
 📖 **For detailed troubleshooting, see [SETUP_GUIDE.md](SETUP_GUIDE.md)**
 
@@ -183,7 +183,7 @@ Consolidated Analytics/
 
 ### Warehouse Sizing
 
-<img src="images/warehouse_sizing.svg" width="100%">
+![Warehouse Sizing](images/warehouse_sizing.svg)
 
 ### Customization
 
