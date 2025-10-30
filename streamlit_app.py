@@ -337,22 +337,24 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                                 ) AS RESPONSE
                                             """
                                             ai_result = session.sql(check_query).collect()
-                                            ai_response = ai_result[0]['RESPONSE'].strip().upper() if ai_result else ""
+                                            ai_response = ai_result[0]['RESPONSE'].strip() if ai_result else ""
+                                            ai_response_upper = ai_response.upper()
                                             
-                                            # REJECT if response contains YES (it's a map)
-                                            # Also check for map-related keywords in case AI explains
-                                            map_indicators = ['YES', 'MAP', 'STREET', 'LOCATION', 'GEOGRAPHIC', 'PIN', 'MARKER', 'ROUTE', 'NAVIGATION']
-                                            is_map = any(indicator in ai_response for indicator in map_indicators) and 'NO' not in ai_response
+                                            # ONLY reject if AI explicitly says YES (it's a map)
+                                            # Check if response starts with YES or is just "YES"
+                                            is_map = (ai_response_upper.startswith('YES') or 
+                                                     ai_response_upper == 'YES' or 
+                                                     ai_response_upper.strip('.') == 'YES')
                                             
-                                            if is_map or ai_response.startswith('YES'):
-                                                # It's a map - delete it
+                                            if is_map:
+                                                # AI confirmed it's a map - delete it
                                                 skipped_images += 1
                                                 try:
                                                     session.sql(f"REMOVE @{DATABASE}.{SCHEMA}.{IMAGE_STAGE}/{actual_image_name}").collect()
                                                 except:
                                                     pass
                                             else:
-                                                # Keep it - it's a property photo
+                                                # AI said NO or anything else - keep it (it's a property photo)
                                                 extracted_images.append(actual_image_name)
                                         except Exception as ai_error:
                                             # If AI check fails, KEEP the image
