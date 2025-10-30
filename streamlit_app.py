@@ -280,29 +280,31 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                 height = obj['/Height']
                                 aspect_ratio = width / height
                                 
-                                # AGGRESSIVE MAP FILTERING
-                                # Property photos are typically square to slightly landscape (0.6:1 to 1.8:1)
-                                # Maps are typically WIDE (>1.8:1) - we reject these aggressively
+                                # ULTRA-AGGRESSIVE MAP FILTERING
+                                # Most property photos are PORTRAIT or NEAR-SQUARE
+                                # Maps can be any aspect ratio but are often high-resolution and square/wide
                                 
                                 # FILTER 1: Skip small images (logos, icons, decorative elements)
-                                if width < 400 or height < 400:
+                                if width < 500 or height < 500:
                                     skipped_images += 1
                                     continue
                                 
-                                # FILTER 2: STRICT aspect ratio - ONLY accept near-square to moderate landscape
-                                # Property photos: 0.6:1 (portrait) to 1.8:1 (landscape)
-                                # Reject anything wider (maps) or too narrow
-                                if aspect_ratio > 1.8 or aspect_ratio < 0.5:
+                                # FILTER 2: VERY STRICT aspect ratio - Prefer portrait to square images
+                                # Most property photos: 0.67:1 (2:3 portrait) to 1.4:1 (slight landscape)
+                                # Reject wide landscape (maps often wide) and extreme portrait
+                                if aspect_ratio > 1.4 or aspect_ratio < 0.6:
                                     skipped_images += 1
                                     continue
                                 
-                                # FILTER 3: Skip moderately wide images if they're large (catches maps)
-                                if width > 1500 and aspect_ratio > 1.4:
+                                # FILTER 3: Maximum dimensions - maps are often very high resolution
+                                # Skip images larger than 1800x1800 (typical property photos are smaller)
+                                if width > 1800 or height > 1800:
                                     skipped_images += 1
                                     continue
                                 
-                                # FILTER 4: Skip images wider than 2000px (almost always maps or diagrams)
-                                if width > 2000:
+                                # FILTER 4: Skip perfect squares that are large (often maps)
+                                # Property photos are rarely perfectly square
+                                if abs(aspect_ratio - 1.0) < 0.05 and width > 1000:
                                     skipped_images += 1
                                     continue
                                 
