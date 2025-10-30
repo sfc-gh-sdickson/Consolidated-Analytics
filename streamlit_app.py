@@ -598,11 +598,9 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         # Convert analysis_json to JSON string for METADATA
         metadata_json_str = json.dumps(analysis_json)
         
-        # Create DataFrame with the data
-        # Note: Table has 17 columns including ID (auto-increment) and ANALYSIS_TIMESTAMP (default)
-        # We need to provide all columns, using None for auto-generated ones
+        # Create DataFrame with ONLY the columns we're providing values for
+        # DO NOT include ID (auto-increment) or ANALYSIS_TIMESTAMP (default) - Snowflake handles these
         data = [(
-            None,  # ID - will be auto-generated
             file_name,
             image_name,
             model_name,
@@ -617,17 +615,16 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
             float(damage.get('confidence', 0)),
             damage.get('description', '')[:500],
             full_text[:500],
-            None,  # ANALYSIS_TIMESTAMP - will use default CURRENT_TIMESTAMP()
             metadata_json_str  # Pass as string, will convert to VARIANT
         )]
         
         schema = [
-            "ID", "FILE_NAME", "IMAGE_NAME", "MODEL_NAME", "PAGE_NUMBER",
+            "FILE_NAME", "IMAGE_NAME", "MODEL_NAME", "PAGE_NUMBER",
             "FOR_SALE_SIGN_DETECTED", "FOR_SALE_SIGN_CONFIDENCE",
             "SOLAR_PANEL_DETECTED", "SOLAR_PANEL_CONFIDENCE",
             "HUMAN_PRESENCE_DETECTED", "HUMAN_PRESENCE_CONFIDENCE",
             "POTENTIAL_DAMAGE_DETECTED", "POTENTIAL_DAMAGE_CONFIDENCE",
-            "DAMAGE_DESCRIPTION", "FULL_ANALYSIS_TEXT", "ANALYSIS_TIMESTAMP", "METADATA"
+            "DAMAGE_DESCRIPTION", "FULL_ANALYSIS_TEXT", "METADATA"
         ]
         
         df = session.create_dataframe(data, schema=schema)
@@ -635,8 +632,12 @@ def save_analysis_results(file_name, image_name, model_name, page_number, analys
         # Convert METADATA column from string to VARIANT using parse_json
         df = df.with_column("METADATA", parse_json(df["METADATA"]))
         
-        # Write to table
-        df.write.mode("append").save_as_table(f"{DATABASE}.{SCHEMA}.{ANALYSIS_TABLE}")
+        # Select only the columns we're inserting (exclude ID and ANALYSIS_TIMESTAMP)
+        # Write to table - Snowflake will auto-generate ID and set ANALYSIS_TIMESTAMP
+        df.write.mode("append").save_as_table(
+            f"{DATABASE}.{SCHEMA}.{ANALYSIS_TABLE}",
+            column_order="name"  # Match columns by name, not position
+        )
         
         return True
         
