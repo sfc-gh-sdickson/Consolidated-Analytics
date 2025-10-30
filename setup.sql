@@ -77,12 +77,12 @@ CREATE OR REPLACE STAGE PDF_FILES_STAGE
 
 -- Step 6: Create File Format for CSV Export (Optional)
 -- ================================================================
-CREATE OR REPLACE FILE FORMAT CSV_FORMAT
-    TYPE = 'CSV'
-    FIELD_DELIMITER = ','
-    SKIP_HEADER = 1
-    FIELD_OPTIONALLY_ENCLOSED_BY = '"'
-    COMPRESSION = 'NONE';
+-- CREATE OR REPLACE FILE FORMAT CSV_FORMAT
+--     TYPE = 'CSV'
+--     FIELD_DELIMITER = ','
+--     SKIP_HEADER = 1
+--     FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+--     COMPRESSION = 'NONE';
 
 -- Step 7: Grant Necessary Permissions
 -- ================================================================
@@ -96,99 +96,99 @@ CREATE OR REPLACE FILE FORMAT CSV_FORMAT
 
 -- Step 8: Create View for Latest Analysis Results
 -- ================================================================
-CREATE OR REPLACE VIEW VW_LATEST_IMAGE_ANALYSIS AS
-SELECT 
-    FILE_NAME,
-    IMAGE_NAME,
-    MODEL_NAME,
-    PAGE_NUMBER,
-    FOR_SALE_SIGN_DETECTED,
-    SOLAR_PANEL_DETECTED,
-    HUMAN_PRESENCE_DETECTED,
-    POTENTIAL_DAMAGE_DETECTED,
-    DAMAGE_DESCRIPTION,
-    ANALYSIS_TIMESTAMP
-FROM IMAGE_ANALYSIS_RESULTS
-QUALIFY ROW_NUMBER() OVER (PARTITION BY FILE_NAME, IMAGE_NAME ORDER BY ANALYSIS_TIMESTAMP DESC) = 1
-ORDER BY ANALYSIS_TIMESTAMP DESC;
+-- CREATE OR REPLACE VIEW VW_LATEST_IMAGE_ANALYSIS AS
+-- SELECT 
+--     FILE_NAME,
+--     IMAGE_NAME,
+--     MODEL_NAME,
+--     PAGE_NUMBER,
+--     FOR_SALE_SIGN_DETECTED,
+--     SOLAR_PANEL_DETECTED,
+--     HUMAN_PRESENCE_DETECTED,
+--     POTENTIAL_DAMAGE_DETECTED,
+--     DAMAGE_DESCRIPTION,
+--     ANALYSIS_TIMESTAMP
+-- FROM IMAGE_ANALYSIS_RESULTS
+-- QUALIFY ROW_NUMBER() OVER (PARTITION BY FILE_NAME, IMAGE_NAME ORDER BY ANALYSIS_TIMESTAMP DESC) = 1
+-- ORDER BY ANALYSIS_TIMESTAMP DESC;
 
 -- Step 9: Create Python UDF for PDF Text Extraction
 -- ================================================================
-CREATE OR REPLACE FUNCTION EXTRACT_PDF_TEXT(file_path STRING)
-RETURNS STRING
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.10'
-HANDLER = 'extract_text'
-PACKAGES = ('pypdf2', 'requests')
-AS
-$$
-import PyPDF2
-import sys
-import io
-import requests
-
-def extract_text(file_path):
-    try:
-        # Use requests to fetch the scoped file URL
-        response = requests.get(file_path)
-        response.raise_for_status()
-        pdf_data = response.content
-        pdf_file = io.BytesIO(pdf_data)
-        
-        reader = PyPDF2.PdfReader(pdf_file)
-        text = ''
-        for page_num in range(len(reader.pages)):
-            page = reader.pages[page_num]
-            text += f'--- Page {page_num + 1} ---\n'
-            text += page.extract_text()
-            text += '\n\n'
-        return text
-    except Exception as e:
-        return f'Error extracting text: {str(e)}'
-$$;
+-- CREATE OR REPLACE FUNCTION EXTRACT_PDF_TEXT(file_path STRING)
+-- RETURNS STRING
+-- LANGUAGE PYTHON
+-- RUNTIME_VERSION = '3.10'
+-- HANDLER = 'extract_text'
+-- PACKAGES = ('pypdf2', 'requests')
+-- AS
+-- $$
+-- import PyPDF2
+-- import sys
+-- import io
+-- import requests
+-- 
+-- def extract_text(file_path):
+--     try:
+--         # Use requests to fetch the scoped file URL
+--         response = requests.get(file_path)
+--         response.raise_for_status()
+--         pdf_data = response.content
+--         pdf_file = io.BytesIO(pdf_data)
+--         
+--         reader = PyPDF2.PdfReader(pdf_file)
+--         text = ''
+--         for page_num in range(len(reader.pages)):
+--             page = reader.pages[page_num]
+--             text += f'--- Page {page_num + 1} ---\n'
+--             text += page.extract_text()
+--             text += '\n\n'
+--         return text
+--     except Exception as e:
+--         return f'Error extracting text: {str(e)}'
+-- $$;
 
 -- Step 10: Create Python UDF for PDF Image Extraction Info
 -- ================================================================
-CREATE OR REPLACE FUNCTION GET_PDF_IMAGE_COUNT(file_path STRING)
-RETURNS NUMBER
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.10'
-HANDLER = 'count_images'
-PACKAGES = ('pypdf2', 'requests')
-AS
-$$
-import PyPDF2
-import io
-import requests
-
-def count_images(file_path):
-    try:
-        # Use requests to fetch the scoped file URL
-        response = requests.get(file_path)
-        response.raise_for_status()
-        pdf_data = response.content
-        pdf_file = io.BytesIO(pdf_data)
-        
-        reader = PyPDF2.PdfReader(pdf_file)
-        image_count = 0
-        for page in reader.pages:
-            # Check if page has resources
-            if '/Resources' in page:
-                resources = page['/Resources']
-                if '/XObject' in resources:
-                    xObject = resources['/XObject']
-                    if hasattr(xObject, 'get_object'):
-                        xObject = xObject.get_object()
-                    for obj_name in xObject:
-                        obj = xObject[obj_name]
-                        if hasattr(obj, 'get_object'):
-                            obj = obj.get_object()
-                        if '/Subtype' in obj and obj['/Subtype'] == '/Image':
-                            image_count += 1
-        return image_count
-    except Exception as e:
-        return 0
-$$;
+-- CREATE OR REPLACE FUNCTION GET_PDF_IMAGE_COUNT(file_path STRING)
+-- RETURNS NUMBER
+-- LANGUAGE PYTHON
+-- RUNTIME_VERSION = '3.10'
+-- HANDLER = 'count_images'
+-- PACKAGES = ('pypdf2', 'requests')
+-- AS
+-- $$
+-- import PyPDF2
+-- import io
+-- import requests
+-- 
+-- def count_images(file_path):
+--     try:
+--         # Use requests to fetch the scoped file URL
+--         response = requests.get(file_path)
+--         response.raise_for_status()
+--         pdf_data = response.content
+--         pdf_file = io.BytesIO(pdf_data)
+--         
+--         reader = PyPDF2.PdfReader(pdf_file)
+--         image_count = 0
+--         for page in reader.pages:
+--             # Check if page has resources
+--             if '/Resources' in page:
+--                 resources = page['/Resources']
+--                 if '/XObject' in resources:
+--                     xObject = resources['/XObject']
+--                     if hasattr(xObject, 'get_object'):
+--                         xObject = xObject.get_object()
+--                     for obj_name in xObject:
+--                         obj = xObject[obj_name]
+--                         if hasattr(obj, 'get_object'):
+--                             obj = obj.get_object()
+--                         if '/Subtype' in obj and obj['/Subtype'] == '/Image':
+--                             image_count += 1
+--         return image_count
+--     except Exception as e:
+--         return 0
+-- $$;
 
 -- Step 11: Verify Setup
 -- ================================================================
