@@ -199,6 +199,7 @@ def extract_text_from_pdf_bytes(pdf_bytes, file_name):
 def extract_images_from_pdf_bytes(pdf_bytes, file_name):
     """
     Extract images from PDF and save to Snowflake stage
+    Filters out non-property images (logos, maps, icons)
     
     Args:
         pdf_bytes: PDF file as bytes
@@ -220,7 +221,35 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
         # Read the PDF
         reader = PyPDF2.PdfReader(pdf_file)
         extracted_images = []
-        image_counter = 0
+        total_images_found = 0
+        skipped_images = 0
+        
+        # Create progress bar
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Count total images first
+        total_potential_images = 0
+        for page in reader.pages:
+            if '/Resources' in page:
+                resources = page['/Resources']
+                if '/XObject' in resources:
+                    xObject = resources['/XObject']
+                    if hasattr(xObject, 'get_object'):
+                        xObject = xObject.get_object()
+                    for obj_name in xObject:
+                        obj = xObject[obj_name]
+                        if hasattr(obj, 'get_object'):
+                            obj = obj.get_object()
+                        if '/Subtype' in obj and obj['/Subtype'] == '/Image':
+                            total_potential_images += 1
+        
+        if total_potential_images == 0:
+            status_text.warning(f"⚠️ No images found in PDF ({len(reader.pages)} pages scanned)")
+            progress_bar.empty()
+            return []
+        
+        processed = 0
         
         for page_num, page in enumerate(reader.pages, start=1):
             # Check if page has resources
@@ -237,12 +266,31 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                             obj = obj.get_object()
                         
                         if '/Subtype' in obj and obj['/Subtype'] == '/Image':
-                            image_counter += 1
+                            total_images_found += 1
+                            processed += 1
+                            
+                            # Update progress
+                            progress_bar.progress(processed / total_potential_images)
+                            status_text.text(f"Processing image {processed} of {total_potential_images}...")
                             
                             # Extract image data
                             try:
                                 # Get image properties
-                                size = (obj['/Width'], obj['/Height'])
+                                width = obj['/Width']
+                                height = obj['/Height']
+                                
+                                # FILTER: Skip small images (likely logos, icons, or decorative elements)
+                                # Property images are typically larger than 200x200 pixels
+                                if width < 200 or height < 200:
+                                    skipped_images += 1
+                                    continue
+                                
+                                # FILTER: Skip very wide/narrow images (likely headers, footers, or decorative bars)
+                                aspect_ratio = width / height
+                                if aspect_ratio > 5 or aspect_ratio < 0.2:
+                                    skipped_images += 1
+                                    continue
+                                
                                 data = obj.get_data()
                                 
                                 # Determine image format
@@ -270,7 +318,7 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                     
                                     # Create a meaningful filename
                                     base_name = file_name.replace('.pdf', '').replace(' ', '_')
-                                    image_filename = f"{base_name}_page{page_num}_img{image_counter}.{ext}"
+                                    image_filename = f"{base_name}_page{page_num}_img{len(extracted_images)+1}.{ext}"
                                     
                                     put_result = session.file.put(
                                         tmp_path,
@@ -285,23 +333,23 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                         # Extract just the filename without path
                                         actual_image_name = uploaded_filename.split('/')[-1]
                                         extracted_images.append(actual_image_name)
-                                        st.info(f"✅ Uploaded image {image_counter}: {actual_image_name}")
-                                    else:
-                                        st.warning(f"⚠️ Could not confirm upload for image {image_counter}")
                                 finally:
                                     # Clean up temp file
                                     if os.path.exists(tmp_path):
                                         os.unlink(tmp_path)
                                         
                             except Exception as img_error:
-                                st.warning(f"Could not extract image {image_counter} from page {page_num}: {str(img_error)}")
+                                # Silently skip images that fail extraction
+                                skipped_images += 1
                                 continue
         
-        # Summary
+        # Clear progress bar and show summary
+        progress_bar.empty()
+        
         if extracted_images:
-            st.success(f"📊 Extraction Summary: {len(extracted_images)} images extracted from {len(reader.pages)} pages")
+            status_text.success(f"✅ Extracted {len(extracted_images)} property images from {len(reader.pages)} pages (skipped {skipped_images} non-property images)")
         else:
-            st.warning(f"⚠️ No images found in PDF ({len(reader.pages)} pages scanned)")
+            status_text.warning(f"⚠️ No property images found. Found {total_images_found} total images but all were filtered out (logos, maps, or decorative elements)")
         
         return extracted_images
     except Exception as e:
