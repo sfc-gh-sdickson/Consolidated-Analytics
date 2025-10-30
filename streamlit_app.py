@@ -11,6 +11,7 @@ IMPORTANT: Uses ONLY packages available in Streamlit in Snowflake
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import logging
 from typing import Dict, List, Optional, Any, Union
 from snowflake.snowpark.context import get_active_session
 from snowflake.snowpark import functions as F
