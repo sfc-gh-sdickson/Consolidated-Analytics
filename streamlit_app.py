@@ -755,9 +755,16 @@ with st.sidebar:
     
     st.subheader("Analysis Categories")
     
-    # Display current categories
-    for cat in st.session_state['analysis_categories']:
-        st.markdown(f"- **{cat['name']}**: {cat['description']}")
+    # Display current categories with delete buttons
+    for idx, cat in enumerate(st.session_state['analysis_categories']):
+        col_cat, col_del = st.columns([5, 1])
+        with col_cat:
+            st.markdown(f"**{cat['name']}**: {cat['description']}")
+        with col_del:
+            if st.button("🗑️", key=f"delete_cat_{idx}", help=f"Delete {cat['name']}"):
+                st.session_state['analysis_categories'].pop(idx)
+                st.success(f"✅ Deleted: {cat['name']}")
+                st.rerun()
     
     # Add new category form
     with st.expander("➕ Add Custom Category"):
@@ -787,6 +794,40 @@ with st.sidebar:
                     st.session_state['analysis_categories'] = DEFAULT_CATEGORIES.copy()
                     st.success("✅ Reset to default categories")
                     st.rerun()
+    
+    st.divider()
+    
+    # Rerun Analysis on Existing Data
+    st.subheader("🔄 Rerun Analysis")
+    st.caption("Reanalyze existing extracted images/text with current categories")
+    
+    if st.button("Rerun Analysis on Existing Data", use_container_width=True, type="primary"):
+        with st.spinner("Reanalyzing existing data with current categories..."):
+            # Get list of images from stage
+            try:
+                stage_list = session.sql(f"LIST @{DATABASE}.{SCHEMA}.{IMAGE_STAGE}").collect()
+                image_files = [row['name'].split('/')[-1] for row in stage_list]
+                
+                if image_files:
+                    # Use the current selected model and categories
+                    st.info(f"Found {len(image_files)} images. Analyzing with {len(st.session_state['analysis_categories'])} categories...")
+                    
+                    results = analyze_images_with_cortex(
+                        "reanalysis",  # file_name
+                        image_files,
+                        selected_model,
+                        st.session_state['analysis_categories'],
+                        batch_size=5
+                    )
+                    
+                    if results:
+                        st.success(f"✅ Reanalyzed {len(results)} images with updated categories!")
+                    else:
+                        st.warning("⚠️ No results from reanalysis")
+                else:
+                    st.warning("⚠️ No images found in stage. Please extract images first.")
+            except Exception as e:
+                st.error(f"Error during reanalysis: {str(e)}")
 
 # Main Content Area
 tab1, tab2, tab3 = st.tabs(["📤 Upload & Process", "📊 View Results", "🔍 Analysis Results"])
