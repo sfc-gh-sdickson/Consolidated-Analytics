@@ -327,35 +327,33 @@ def extract_images_from_pdf_bytes(pdf_bytes, file_name):
                                         # Extract just the filename without path
                                         actual_image_name = uploaded_filename.split('/')[-1]
                                         
-                                        # AI CONTENT FILTERING - Check if this is actually a property photo
+                                        # AI CONTENT FILTERING - Check if this is a MAP/DIAGRAM (reject only those)
                                         try:
                                             check_query = f"""
                                                 SELECT SNOWFLAKE.CORTEX.COMPLETE(
                                                     'pixtral-large',
-                                                    'Is this image a photograph of an actual house, building, or property? Answer ONLY with YES or NO. If this is a map, diagram, chart, logo, or anything other than an actual property photograph, answer NO.',
+                                                    'Look at this image carefully. Is this a MAP, STREET MAP, LOCATION MAP, or DIAGRAM? Answer YES only if this is clearly a map showing streets, roads, or geographic locations. If this is a photograph of a house, building, property, or any architectural structure, answer NO. Answer ONLY with YES or NO.',
                                                     TO_FILE('@{DATABASE}.{SCHEMA}.{IMAGE_STAGE}', '{actual_image_name}')
                                                 ) AS RESPONSE
                                             """
                                             ai_result = session.sql(check_query).collect()
                                             ai_response = ai_result[0]['RESPONSE'].strip().upper() if ai_result else ""
                                             
-                                            # Only keep if AI confirms it's a property photo
-                                            if 'YES' in ai_response:
-                                                extracted_images.append(actual_image_name)
-                                            else:
-                                                # It's a map/diagram/logo - delete it
+                                            # Only REJECT if AI confirms it's a MAP
+                                            # If unsure or it says NO, KEEP the image
+                                            if 'YES' in ai_response and 'MAP' in ai_response.upper():
+                                                # It's a map - delete it
                                                 skipped_images += 1
                                                 try:
                                                     session.sql(f"REMOVE @{DATABASE}.{SCHEMA}.{IMAGE_STAGE}/{actual_image_name}").collect()
                                                 except:
                                                     pass
+                                            else:
+                                                # Keep it - it's a property photo or uncertain
+                                                extracted_images.append(actual_image_name)
                                         except Exception as ai_error:
-                                            # If AI check fails, be conservative and skip the image
-                                            skipped_images += 1
-                                            try:
-                                                session.sql(f"REMOVE @{DATABASE}.{SCHEMA}.{IMAGE_STAGE}/{actual_image_name}").collect()
-                                            except:
-                                                pass
+                                            # If AI check fails, KEEP the image (be conservative)
+                                            extracted_images.append(actual_image_name)
                                 finally:
                                     # Clean up temp file
                                     if os.path.exists(tmp_path):
