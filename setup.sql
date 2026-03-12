@@ -146,7 +146,6 @@ CREATE OR REPLACE STAGE PDF_FILES_STAGE
 --     except Exception as e:
 --         return f'Error extracting text: {str(e)}'
 -- $$;
-
 -- Step 10: Create Python UDF for PDF Image Extraction Info
 -- ================================================================
 -- CREATE OR REPLACE FUNCTION GET_PDF_IMAGE_COUNT(file_path STRING)
@@ -189,7 +188,6 @@ CREATE OR REPLACE STAGE PDF_FILES_STAGE
 --     except Exception as e:
 --         return 0
 -- $$;
-
 -- Step 11: Verify Setup
 -- ================================================================
 -- Show all created objects
@@ -207,3 +205,8 @@ SELECT COUNT(*) AS ANALYSIS_RECORDS FROM IMAGE_ANALYSIS_RESULTS;
 -- END OF SETUP SCRIPT
 -- ================================================================
 
+list @PDF_ANALYTICS_DB.PDF_PROCESSING.PDF_IMAGES_STAGE;
+
+
+truncate IMAGE_ANALYSIS_RESULTS;
+truncate PDF_TEXT_DATA;
